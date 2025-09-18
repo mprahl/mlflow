@@ -25,6 +25,44 @@ const graphqlFetch = async (uri: any, options: any): Promise<Response> => {
     ...options.headers,
   });
 
+  // Dev-only: attach Kubernetes token from localStorage/cookie to authorize GraphQL calls
+  try {
+    // eslint-disable-next-line no-restricted-globals
+    const win: any = window as any;
+    if (win && win.localStorage && !headers.has('Authorization')) {
+      const devToken = win.localStorage.getItem('mlflow.k8s.bearerToken');
+      if (devToken) {
+        headers.set('Authorization', `Bearer ${devToken}`);
+      }
+    }
+    // Inject namespace header from URL param if not explicitly provided
+    if (!headers.has('X-MLflow-Namespace')) {
+      let ns: string | null = null;
+      const hash = win?.location?.hash || '';
+      const qIndex = hash.indexOf('?');
+      if (qIndex >= 0) {
+        const qs = new URLSearchParams(hash.substring(qIndex + 1));
+        ns = qs.get('ns');
+      }
+      if (!ns) {
+        const search = win?.location?.search || '';
+        if (search) {
+          const qs2 = new URLSearchParams(search.startsWith('?') ? search.substring(1) : search);
+          ns = qs2.get('ns');
+        }
+      }
+      if (ns) {
+        headers.set('X-MLflow-Namespace', ns);
+      }
+    }
+  } catch {
+    // no-op
+  }
+
+  if (!headers.has('X-MLflow-Namespace')) {
+    throw new Error('Namespace not selected. Append ?ns=<namespace> to the URL to proceed.');
+  }
+
   // eslint-disable-next-line no-restricted-globals -- See go/spog-fetch
   return fetch(uri, { ...options, headers }).then((res) => res);
 };

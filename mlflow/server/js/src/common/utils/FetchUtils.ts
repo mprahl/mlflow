@@ -51,6 +51,30 @@ export const getDefaultHeaders = (cookieStr: any) => {
   };
 };
 
+const getNamespaceFromUrl = (): string | null => {
+  try {
+    if (typeof window === 'undefined') return null;
+    // Prefer hash query (?ns=...) since MLflow UI uses hash routing
+    const hash = window.location.hash || '';
+    const qIndex = hash.indexOf('?');
+    if (qIndex >= 0) {
+      const qs = new URLSearchParams(hash.substring(qIndex + 1));
+      const ns = qs.get('ns');
+      if (ns) return ns;
+    }
+    // Fallback to search query
+    const search = window.location.search || '';
+    if (search) {
+      const qs2 = new URLSearchParams(search.startsWith('?') ? search.substring(1) : search);
+      const ns2 = qs2.get('ns');
+      if (ns2) return ns2;
+    }
+  } catch {
+    // no-op
+  }
+  return null;
+};
+
 export const getAjaxUrl = (relativeUrl: any) => {
   if (process.env['MLFLOW_USE_ABSOLUTE_AJAX_URLS'] === 'true' && !relativeUrl.startsWith('/')) {
     return '/' + relativeUrl;
@@ -117,6 +141,37 @@ export const fetchEndpointRaw = ({
     ...getDefaultHeaders(document.cookie),
     ...headerOptions,
   };
+
+  // Development-only: inject Kubernetes bearer token from localStorage if present and not provided explicitly.
+  // Allows UI to authenticate against SSAR-secured APIs without an external auth system.
+  try {
+    if (!('Authorization' in headers) && typeof window !== 'undefined' && window.localStorage) {
+      const devToken = window.localStorage.getItem('mlflow.k8s.bearerToken');
+      if (devToken) {
+        // eslint-disable-next-line @typescript-eslint/naming-convention
+        (headers as any)['Authorization'] = `Bearer ${devToken}`;
+      }
+    }
+    // Inject namespace header from URL param if not explicitly provided
+    if (!('X-MLflow-Namespace' in headers)) {
+      const ns = getNamespaceFromUrl();
+      if (ns) {
+        // eslint-disable-next-line @typescript-eslint/naming-convention
+        (headers as any)['X-MLflow-Namespace'] = ns;
+      }
+    }
+  } catch {
+    // no-op
+  }
+
+  // If namespace is still missing, abort early so the UI can prompt user to pick a namespace
+  if (!('X-MLflow-Namespace' in headers)) {
+    // Allow namespace discovery endpoint without ns
+    const allowWithoutNs = typeof url === 'string' && url.includes('/ajax-api/2.0/mlflow/namespaces');
+    if (!allowWithoutNs) {
+      throw new Error('Namespace not selected. Append ?ns=<namespace> to the URL to proceed.');
+    }
+  }
 
   const defaultOptions = {
     dataType: 'json',
@@ -262,9 +317,9 @@ export const fetchEndpoint = ({
 
 const filterUndefinedFields = (data: any) => {
   if (!Array.isArray(data)) {
-    return pickBy(data, (v) => v !== undefined);
+    return pickBy(data, (v) => !isNil(v) && v !== '');
   } else {
-    return data.filter((v) => v !== undefined);
+    return data.filter((v) => !isNil(v) && v !== '');
   }
 };
 

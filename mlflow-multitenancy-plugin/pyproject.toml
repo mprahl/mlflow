@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mlflow-multitenancy-plugin"
+version = "0.1.0"
+description = "MLflow multitenancy plugin: request header provider and server helpers (SSAR, store wrappers)"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+  "mlflow>=2.13",
+]
+authors = [{ name = "Your Org" }]
+
+[project.optional-dependencies]
+server = [
+  "kubernetes>=24",
+]
+
+[project.entry-points."mlflow.request_header_provider"]
+multitenancy = "mlflow_multitenancy_plugin.request_header_provider:MultitenancyRequestHeaderProvider"
+
+# Optional app/plugin entry point (server-side bootstrapping can import helpers from this package)
+[project.entry-points."mlflow.app"]
+multitenancy = "mlflow_multitenancy_plugin.server.app:app"
+
+[project.entry-points."mlflow.tracking_store"]
+ns = "mlflow_multitenancy_plugin.store:ns_tracking_store_factory"
+
+[project.entry-points."mlflow.model_registry_store"]
+ns = "mlflow_multitenancy_plugin.store:ns_model_registry_store_factory"
