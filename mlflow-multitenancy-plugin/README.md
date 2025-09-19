@@ -17,6 +17,10 @@ A comprehensive plugin that enables secure multitenancy in MLflow deployments th
 - Kubernetes cluster (for server-side features)
 - Valid Kubernetes bearer tokens for authentication
 
+## 🚀 OpenShift Deployment
+
+You can see sample deployment manifests for OpenShift at [deployment.yaml](./deployment.yaml).
+
 ## 🚀 Installation
 
 ### Development Installation

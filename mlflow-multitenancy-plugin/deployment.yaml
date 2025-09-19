@@ -1,0 +1,244 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mlflow
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mlflow-sa
+  namespace: mlflow
+  annotations:
+    serviceaccounts.openshift.io/oauth-redirectreference.mlflow: '{"kind":"OAuthRedirectReference","apiVersion":"v1","reference":{"kind":"Route","name":"mlflow"}}'
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: mlflow-sa-list-namespaces
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: mlflow-sa-auth-delegator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: mlflow-sa
+    namespace: mlflow
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: mlflow-sa-list-namespaces
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: mlflow-sa-list-namespaces
+subjects:
+  - kind: ServiceAccount
+    name: mlflow-sa
+    namespace: mlflow
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: oauth-proxy-secret
+  namespace: mlflow
+type: Opaque
+stringData:
+  # 32-byte base64 string. Replace with a securely generated value.
+  cookie-secret: "27311f3d4799c14f00880c33fa3c41d7"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mlflow-pvc
+  namespace: mlflow
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: gp3-csi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow
+  namespace: mlflow
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: mlflow
+  template:
+    metadata:
+      labels:
+        app: mlflow
+    spec:
+      serviceAccountName: mlflow-sa
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: mlflow-storage
+          persistentVolumeClaim:
+            claimName: mlflow-pvc
+        - name: oauth-proxy-tls-secret
+          secret:
+            secretName: mlflow-tls
+            defaultMode: 420
+        - name: tls-secret-direct
+          secret:
+            secretName: mlflow-tls-direct
+            defaultMode: 420
+      containers:
+        - name: mlflow
+          image: quay.io/mprahl/mlflow
+          imagePullPolicy: Always
+          command:
+            - mlflow
+          args:
+            - server
+            - --backend-store-uri=ns:sqlite:////mlflow/mlflow.db
+            - --registry-store-uri=ns:sqlite:////mlflow/mlflow.db
+            - --artifacts-destination=file:///mlflow/artifacts
+            - --host=0.0.0.0
+            - --port=9443
+            - --workers=1
+            - --gunicorn-opts
+            - "--certfile=/etc/tls/tls.crt --keyfile=/etc/tls/tls.key"
+            - --app-name=multitenancy
+          env:
+            - name: HOME
+              value: /tmp
+          ports:
+            - name: https-direct
+              containerPort: 9443
+          volumeMounts:
+            - name: mlflow-storage
+              mountPath: /mlflow
+            - name: tls-secret-direct
+              mountPath: /etc/tls
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+        - name: oauth-proxy
+          image: quay.io/mprahl/custom-oauth:latest
+          imagePullPolicy: Always
+          args:
+            - --provider=openshift
+            - --https-address=0.0.0.0:8443
+            - --upstream=https://mlflow-direct.mlflow.svc:9443/
+            - --tls-cert=/etc/tls/tls.crt
+            - --tls-key=/etc/tls/tls.key
+            - --upstream-ca=/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt
+            - --pass-user-headers=true
+            - --pass-access-token=true
+            - --pass-user-bearer-token=true
+            - --cookie-secure=true
+            - --cookie-refresh=1h
+            - --cookie-expire=12h
+            - --skip-auth-preflight=true
+            - --openshift-service-account=mlflow-sa
+            - --request-logging=true
+            - --email-domain=*
+            - --cookie-secret=$(OAUTH_PROXY_COOKIE_SECRET)
+          env:
+            - name: OAUTH_PROXY_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: oauth-proxy-secret
+                  key: cookie-secret
+          ports:
+            - name: https
+              containerPort: 8443
+          volumeMounts:
+            - name: oauth-proxy-tls-secret
+              mountPath: /etc/tls
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+          readinessProbe:
+            httpGet:
+              path: /oauth/healthz
+              port: 8443
+              scheme: HTTPS
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /oauth/healthz
+              port: 8443
+              scheme: HTTPS
+            periodSeconds: 20
+            timeoutSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow
+  namespace: mlflow
+  annotations:
+    service.beta.openshift.io/serving-cert-secret-name: mlflow-tls
+spec:
+  selector:
+    app: mlflow
+  ports:
+    - name: https
+      protocol: TCP
+      port: 8443
+      targetPort: https
+  type: ClusterIP
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: mlflow
+  namespace: mlflow
+spec:
+  to:
+    kind: Service
+    name: mlflow
+  port:
+    targetPort: https
+  tls:
+    termination: reencrypt
+    insecureEdgeTerminationPolicy: Redirect
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow-direct
+  namespace: mlflow
+  annotations:
+    service.beta.openshift.io/serving-cert-secret-name: mlflow-tls-direct
+spec:
+  selector:
+    app: mlflow
+  ports:
+    - name: https
+      protocol: TCP
+      port: 9443
+      targetPort: https-direct
+  type: ClusterIP
