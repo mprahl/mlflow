@@ -1,7 +1,7 @@
 import { ImageIcon, Spinner } from '@databricks/design-system';
 import { useDesignSystemTheme } from '@databricks/design-system';
 import { FormattedMessage } from 'react-intl';
-import { getArtifactLocationUrl } from '@mlflow/mlflow/src/common/utils/ArtifactUtils';
+import { getArtifactBlob, getArtifactLocationUrl } from '@mlflow/mlflow/src/common/utils/ArtifactUtils';
 import type { ImageEntity } from '@mlflow/mlflow/src/experiment-tracking/types';
 import { useState, useEffect } from 'react';
 import { Typography } from '@databricks/design-system';
@@ -24,18 +24,42 @@ export const ImagePlot = ({ imageUrl, compressedImageUrl, imageSize, maxImageSiz
   const { theme } = useDesignSystemTheme();
 
   const [imageLoading, setImageLoading] = useState(true);
+  const [compressedObjUrl, setCompressedObjUrl] = useState<string | undefined>(undefined);
+  const [fullObjUrl, setFullObjUrl] = useState<string | undefined>(undefined);
 
   useEffect(() => {
-    // Load the image in the memory (should reuse the same request) in order to get the loading state
+    const revoked: string[] = [];
     setImageLoading(true);
-    const img = new window.Image();
-    img.onload = () => setImageLoading(false);
-    img.onerror = () => setImageLoading(false);
-    img.src = compressedImageUrl;
-    return () => {
-      img.src = '';
+
+    const loadCompressed = async () => {
+      try {
+        const blob = await getArtifactBlob(compressedImageUrl);
+        const url = URL.createObjectURL(blob);
+        setCompressedObjUrl(url);
+        revoked.push(url);
+        setImageLoading(false);
+      } catch {
+        setImageLoading(false);
+      }
     };
-  }, [compressedImageUrl]);
+    const loadFull = async () => {
+      try {
+        const blob = await getArtifactBlob(imageUrl);
+        const url = URL.createObjectURL(blob);
+        setFullObjUrl(url);
+        revoked.push(url);
+      } catch {
+        // ignore
+      }
+    };
+    loadCompressed();
+    loadFull();
+    return () => {
+      revoked.forEach((u) => URL.revokeObjectURL(u));
+      setCompressedObjUrl(undefined);
+      setFullObjUrl(undefined);
+    };
+  }, [compressedImageUrl, imageUrl]);
 
   return (
     <div css={{ width: imageSize || '100%', height: imageSize || '100%' }}>
@@ -71,8 +95,8 @@ export const ImagePlot = ({ imageUrl, compressedImageUrl, imageSize, maxImageSiz
           >
             <ImagePreviewGroup visible={previewVisible} onVisibleChange={setPreviewVisible}>
               <Image
-                src={compressedImageUrl}
-                preview={{ src: imageUrl }}
+                src={compressedObjUrl || ''}
+                preview={{ src: fullObjUrl || compressedObjUrl || '' }}
                 style={{ maxWidth: maxImageSize || '100%', maxHeight: maxImageSize || '100%' }}
               />
             </ImagePreviewGroup>

@@ -6,21 +6,19 @@
  */
 
 import { ErrorWrapper } from './ErrorWrapper';
-import { getDefaultHeaders, HTTPMethods } from './FetchUtils';
+import { getDefaultHeaders, HTTPMethods, fetchEndpointRaw } from './FetchUtils';
 
 /**
  * Async function to fetch and return the specified artifact blob from response.
  * Throw exception if the request fails.
  */
 export async function getArtifactBlob(artifactLocation: any) {
-  const getArtifactRequest = new Request(artifactLocation, {
+  const response = await fetchEndpointRaw({
+    relativeUrl: artifactLocation,
     method: HTTPMethods.GET,
-    redirect: 'follow',
-    // TODO: fix types
-    headers: new Headers(getDefaultHeaders(document.cookie) as any),
+    headerOptions: getDefaultHeaders(document.cookie),
+    options: { redirect: 'follow' },
   });
-  // eslint-disable-next-line no-restricted-globals -- See go/spog-fetch
-  const response = await fetch(getArtifactRequest);
 
   if (!response.ok) {
     const errorMessage = (await response.text()) || response.statusText;
@@ -37,13 +35,12 @@ class TextArtifactTooLargeError extends Error {}
  */
 export const getArtifactChunkedText = async (artifactLocation: string) =>
   new Promise<string>(async (resolve, reject) => {
-    const getArtifactRequest = new Request(artifactLocation, {
+    const response = await fetchEndpointRaw({
+      relativeUrl: artifactLocation,
       method: HTTPMethods.GET,
-      redirect: 'follow',
-      headers: new Headers(getDefaultHeaders(document.cookie) as HeadersInit),
+      headerOptions: getDefaultHeaders(document.cookie),
+      options: { redirect: 'follow' },
     });
-    // eslint-disable-next-line no-restricted-globals -- See go/spog-fetch
-    const response = await fetch(getArtifactRequest);
 
     if (!response.ok) {
       const errorMessage = (await response.text()) || response.statusText;

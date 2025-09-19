@@ -185,6 +185,19 @@ class NamespaceEnforcingTrackingStore(AbstractTrackingStore):
             run_name=run_name,
         )
 
+    def delete_experiment(self, experiment_id):
+        # Ensure experiment belongs to the current namespace
+        self.get_experiment(experiment_id)
+        return self._base.delete_experiment(experiment_id)
+
+    def restore_experiment(self, experiment_id):
+        self.get_experiment(experiment_id)
+        return self._base.restore_experiment(experiment_id)
+
+    def rename_experiment(self, experiment_id, new_name):
+        self.get_experiment(experiment_id)
+        return self._base.rename_experiment(experiment_id, new_name)
+
     def _assert_run_in_namespace(self, run_id):
         run = self._base.get_run(run_id)
         # Will raise if experiment is not in active namespace
@@ -227,6 +240,21 @@ class NamespaceEnforcingTrackingStore(AbstractTrackingStore):
     def log_metric(self, run_id, metric):
         self._assert_run_in_namespace(run_id)
         return self._base.log_metric(run_id, metric)
+
+    def log_inputs(self, run_id: str, datasets=None, models=None):
+        # Ensure run is in namespace before logging inputs
+        self._assert_run_in_namespace(run_id)
+        base_method = getattr(self._base, "log_inputs", None)
+        if callable(base_method):
+            return base_method(run_id=run_id, datasets=datasets, models=models)
+        return None
+
+    def get_metric_history(self, run_id, metric_key, max_results=None, page_token=None):
+        # Ensure run is in namespace, then delegate to the base store
+        self._assert_run_in_namespace(run_id)
+        return self._base.get_metric_history(
+            run_id, metric_key, max_results=max_results, page_token=page_token
+        )
 
     def search_experiments(
         self,
@@ -275,6 +303,74 @@ class NamespaceEnforcingTrackingStore(AbstractTrackingStore):
             order_by,
             page_token,
         )
+
+    # Logged models helpers and API
+    def _assert_logged_model_in_namespace(self, model_id: str):
+        lm = self._base.get_logged_model(model_id)
+        # Ensure the owning experiment belongs to the active namespace
+        self.get_experiment(lm.experiment_id)
+        return lm
+
+    def create_logged_model(
+        self,
+        experiment_id: str,
+        name: str | None = None,
+        source_run_id: str | None = None,
+        tags: list | None = None,
+        params: list | None = None,
+        model_type: str | None = None,
+    ):
+        # Ensure experiment is in namespace before creation
+        self.get_experiment(experiment_id)
+        return self._base.create_logged_model(
+            experiment_id=experiment_id,
+            name=name,
+            source_run_id=source_run_id,
+            tags=tags,
+            params=params,
+            model_type=model_type,
+        )
+
+    def get_logged_model(self, model_id: str):
+        lm = self._base.get_logged_model(model_id)
+        # Validate namespace via the owning experiment
+        self.get_experiment(lm.experiment_id)
+        return lm
+
+    def delete_logged_model(self, model_id: str) -> None:
+        self._assert_logged_model_in_namespace(model_id)
+        return self._base.delete_logged_model(model_id)
+
+    def set_logged_model_tags(self, model_id: str, tags: list) -> None:
+        self._assert_logged_model_in_namespace(model_id)
+        return self._base.set_logged_model_tags(model_id, tags)
+
+    def delete_logged_model_tag(self, model_id: str, key: str) -> None:
+        self._assert_logged_model_in_namespace(model_id)
+        return self._base.delete_logged_model_tag(model_id, key)
+
+    def finalize_logged_model(self, model_id: str, status):
+        self._assert_logged_model_in_namespace(model_id)
+        return self._base.finalize_logged_model(model_id, status)
+
+    def record_logged_model(self, run_id, mlflow_model):
+        # Ensure run is in namespace
+        self._assert_run_in_namespace(run_id)
+        return self._base.record_logged_model(run_id, mlflow_model)
+
+    def log_outputs(self, run_id: str, models: list):
+        # Ensure run is in namespace
+        self._assert_run_in_namespace(run_id)
+        # Validate each referenced logged model belongs to the namespace
+        for m in models or []:
+            try:
+                model_id = getattr(m, "model_id", None)
+                if model_id:
+                    self._assert_logged_model_in_namespace(model_id)
+            except Exception:
+                # Best effort validation; delegate to base for strict checks
+                pass
+        return self._base.log_outputs(run_id=run_id, models=models)
 
     # Delegate other methods to base
     def __getattr__(self, item):
@@ -346,6 +442,118 @@ class NamespaceEnforcingTrackingStore(AbstractTrackingStore):
                 return None
         return None
 
+    # Additional traces/observability APIs
+    def start_trace(self, trace_info):
+        base_method = getattr(self._base, "start_trace", None)
+        if callable(base_method):
+            try:
+                return base_method(trace_info)
+            except NotImplementedError:
+                return None
+        return None
+
+    def log_spans(self, experiment_id: str, spans):
+        # Ensure experiment is in namespace
+        self.get_experiment(experiment_id)
+        base_method = getattr(self._base, "log_spans", None)
+        if callable(base_method):
+            try:
+                return base_method(experiment_id, spans)
+            except NotImplementedError:
+                return []
+        return []
+
+    def log_spans_async(self, experiment_id: str, spans):
+        # Ensure experiment is in namespace
+        self.get_experiment(experiment_id)
+        base_method = getattr(self._base, "log_spans_async", None)
+        if callable(base_method):
+            try:
+                return base_method(experiment_id, spans)
+            except NotImplementedError:
+                return []
+        return []
+
+    def link_traces_to_run(self, trace_ids: list[str], run_id: str) -> None:
+        self._assert_run_in_namespace(run_id)
+        base_method = getattr(self._base, "link_traces_to_run", None)
+        if callable(base_method):
+            try:
+                return base_method(trace_ids, run_id)
+            except NotImplementedError:
+                return None
+        return None
+
+    def get_trace_info(self, trace_id: str):
+        base_method = getattr(self._base, "get_trace_info", None)
+        if callable(base_method):
+            try:
+                return base_method(trace_id)
+            except NotImplementedError:
+                return None
+        return None
+
+    def _delete_traces(
+        self,
+        experiment_id: str,
+        max_timestamp_millis: int | None = None,
+        max_traces: int | None = None,
+        trace_ids: list[str] | None = None,
+    ) -> int:
+        self.get_experiment(experiment_id)
+        base_method = getattr(self._base, "_delete_traces", None)
+        if callable(base_method):
+            try:
+                return base_method(
+                    experiment_id,
+                    max_timestamp_millis=max_timestamp_millis,
+                    max_traces=max_traces,
+                    trace_ids=trace_ids,
+                )
+            except NotImplementedError:
+                return 0
+        return 0
+
+    def get_online_trace_details(
+        self,
+        trace_id: str,
+        sql_warehouse_id: str,
+        source_inference_table: str,
+        source_databricks_request_id: str,
+    ) -> str:
+        base_method = getattr(self._base, "get_online_trace_details", None)
+        if callable(base_method):
+            try:
+                return base_method(
+                    trace_id,
+                    sql_warehouse_id,
+                    source_inference_table,
+                    source_databricks_request_id,
+                )
+            except NotImplementedError:
+                return ""
+        return ""
+
+    def calculate_trace_filter_correlation(
+        self,
+        experiment_ids: list[str],
+        filter_string1: str,
+        filter_string2: str,
+        base_filter: str | None = None,
+    ):
+        _require_namespace()
+        allowed = [e.experiment_id for e in self.search_experiments()]
+        filtered_ids = [eid for eid in (experiment_ids or []) if eid in allowed]
+        base_method = getattr(self._base, "calculate_trace_filter_correlation", None)
+        if callable(base_method):
+            try:
+                return base_method(
+                    filtered_ids, filter_string1, filter_string2, base_filter
+                )
+            except NotImplementedError:
+                return None
+        return None
+
     # Logged models search wrapper (namespaced)
     def search_logged_models(
         self,
@@ -373,6 +581,249 @@ class NamespaceEnforcingTrackingStore(AbstractTrackingStore):
                 page_token=_coalesce(page_token, None),
             )
         return PagedList([], None)
+
+    # Datasets API
+    def create_dataset(
+        self,
+        name: str,
+        tags: dict[str, str] | None = None,
+        experiment_ids: list[str] | None = None,
+    ):
+        # Inject namespace tag for dataset if tags is provided
+        ns = _require_namespace()
+        tags = dict(tags or {})
+        if NAMESPACE_TAG_KEY not in tags:
+            tags[NAMESPACE_TAG_KEY] = ns
+        if experiment_ids is not None:
+            allowed = [e.experiment_id for e in self.search_experiments()]
+            experiment_ids = [eid for eid in experiment_ids if eid in allowed]
+        base_method = getattr(self._base, "create_dataset", None)
+        if callable(base_method):
+            return base_method(name=name, tags=tags, experiment_ids=experiment_ids)
+        return None
+
+    def delete_dataset(self, dataset_id: str) -> None:
+        base_method = getattr(self._base, "delete_dataset", None)
+        if callable(base_method):
+            return base_method(dataset_id)
+        return None
+
+    def get_dataset(self, dataset_id: str):
+        base_method = getattr(self._base, "get_dataset", None)
+        if callable(base_method):
+            return base_method(dataset_id)
+        return None
+
+    def search_datasets(
+        self,
+        experiment_ids: list[str] | None = None,
+        filter_string: str | None = None,
+        max_results: int = 1000,
+        order_by: list[str] | None = None,
+        page_token: str | None = None,
+    ):
+        _require_namespace()
+        if experiment_ids is not None:
+            allowed = [e.experiment_id for e in self.search_experiments()]
+            experiment_ids = [eid for eid in experiment_ids if eid in allowed]
+            if not experiment_ids:
+                return PagedList([], None)
+        base_method = getattr(self._base, "search_datasets", None)
+        if callable(base_method):
+            try:
+                return base_method(
+                    experiment_ids=experiment_ids,
+                    filter_string=filter_string,
+                    max_results=max_results,
+                    order_by=order_by,
+                    page_token=page_token,
+                )
+            except NotImplementedError:
+                return PagedList([], None)
+        return PagedList([], None)
+
+    def set_dataset_tags(self, dataset_id: str, tags: dict) -> None:
+        base_method = getattr(self._base, "set_dataset_tags", None)
+        if callable(base_method):
+            try:
+                return base_method(dataset_id, tags)
+            except NotImplementedError:
+                return None
+        return None
+
+    def delete_dataset_tag(self, dataset_id: str, key: str) -> None:
+        base_method = getattr(self._base, "delete_dataset_tag", None)
+        if callable(base_method):
+            try:
+                return base_method(dataset_id, key)
+            except NotImplementedError:
+                return None
+        return None
+
+    def add_dataset_to_experiments(self, dataset_id: str, experiment_ids: list[str]):
+        _require_namespace()
+        allowed = [e.experiment_id for e in self.search_experiments()]
+        experiment_ids = [eid for eid in (experiment_ids or []) if eid in allowed]
+        base_method = getattr(self._base, "add_dataset_to_experiments", None)
+        if callable(base_method):
+            return base_method(dataset_id, experiment_ids)
+        return None
+
+    def remove_dataset_from_experiments(
+        self, dataset_id: str, experiment_ids: list[str]
+    ):
+        _require_namespace()
+        allowed = [e.experiment_id for e in self.search_experiments()]
+        experiment_ids = [eid for eid in (experiment_ids or []) if eid in allowed]
+        base_method = getattr(self._base, "remove_dataset_from_experiments", None)
+        if callable(base_method):
+            return base_method(dataset_id, experiment_ids)
+        return None
+
+    def get_dataset_experiment_ids(self, dataset_id: str) -> list[str]:
+        base_method = getattr(self._base, "get_dataset_experiment_ids", None)
+        if callable(base_method):
+            try:
+                result = base_method(dataset_id)
+                # Filter to namespace-visible experiments
+                allowed = {e.experiment_id for e in self.search_experiments()}
+                return [eid for eid in (result or []) if eid in allowed]
+            except NotImplementedError:
+                return []
+        return []
+
+    def upsert_dataset_records(
+        self, dataset_id: str, records: list[dict]
+    ) -> dict[str, int]:
+        base_method = getattr(self._base, "upsert_dataset_records", None)
+        if callable(base_method):
+            try:
+                return base_method(dataset_id, records)
+            except NotImplementedError:
+                return {}
+        return {}
+
+    def _load_dataset_records(
+        self,
+        dataset_id: str,
+        max_results: int | None = None,
+        page_token: str | None = None,
+    ):
+        base_method = getattr(self._base, "_load_dataset_records", None)
+        if callable(base_method):
+            try:
+                return base_method(
+                    dataset_id, max_results=max_results, page_token=page_token
+                )
+            except NotImplementedError:
+                return ([], None)
+        return ([], None)
+
+    # Assessments & scorers APIs
+    def create_assessment(self, assessment):
+        base_method = getattr(self._base, "create_assessment", None)
+        if callable(base_method):
+            try:
+                return base_method(assessment)
+            except NotImplementedError:
+                return None
+        return None
+
+    def update_assessment(
+        self,
+        trace_id: str,
+        assessment_id: str,
+        name: str | None = None,
+        expectation: str | None = None,
+        feedback: str | None = None,
+        rationale: str | None = None,
+        metadata: dict[str, str] | None = None,
+    ):
+        base_method = getattr(self._base, "update_assessment", None)
+        if callable(base_method):
+            try:
+                return base_method(
+                    trace_id,
+                    assessment_id,
+                    name=name,
+                    expectation=expectation,
+                    feedback=feedback,
+                    rationale=rationale,
+                    metadata=metadata,
+                )
+            except NotImplementedError:
+                return None
+        return None
+
+    def delete_assessment(self, trace_id: str, assessment_id):
+        base_method = getattr(self._base, "delete_assessment", None)
+        if callable(base_method):
+            try:
+                return base_method(trace_id, assessment_id)
+            except NotImplementedError:
+                return None
+        return None
+
+    def get_assessment(self, trace_id: str, assessment_id: str):
+        base_method = getattr(self._base, "get_assessment", None)
+        if callable(base_method):
+            try:
+                return base_method(trace_id, assessment_id)
+            except NotImplementedError:
+                return None
+        return None
+
+    def register_scorer(
+        self, experiment_id: str, name: str, serialized_scorer: str
+    ) -> int:
+        self.get_experiment(experiment_id)
+        base_method = getattr(self._base, "register_scorer", None)
+        if callable(base_method):
+            try:
+                return base_method(experiment_id, name, serialized_scorer)
+            except NotImplementedError:
+                return 0
+        return 0
+
+    def delete_scorer(self, experiment_id, name, version=None):
+        self.get_experiment(experiment_id)
+        base_method = getattr(self._base, "delete_scorer", None)
+        if callable(base_method):
+            try:
+                return base_method(experiment_id, name, version)
+            except NotImplementedError:
+                return None
+        return None
+
+    def get_scorer(self, experiment_id, name, version=None):
+        self.get_experiment(experiment_id)
+        base_method = getattr(self._base, "get_scorer", None)
+        if callable(base_method):
+            try:
+                return base_method(experiment_id, name, version)
+            except NotImplementedError:
+                return None
+        return None
+
+    def list_scorers(self, experiment_id):
+        self.get_experiment(experiment_id)
+        base_method = getattr(self._base, "list_scorers", None)
+        if callable(base_method):
+            try:
+                return base_method(experiment_id)
+            except NotImplementedError:
+                return []
+        return []
+
+    def list_scorer_versions(self, experiment_id, name):
+        self.get_experiment(experiment_id)
+        base_method = getattr(self._base, "list_scorer_versions", None)
+        if callable(base_method):
+            try:
+                return base_method(experiment_id, name)
+            except NotImplementedError:
+                return []
+        return []
 
 
 class NamespaceEnforcingModelRegistryStore(AbstractModelRegistryStore):
@@ -651,3 +1102,92 @@ class NamespaceEnforcingModelRegistryStore(AbstractModelRegistryStore):
             except NotImplementedError:
                 return PagedList([], None)
         return PagedList([], None)
+
+    # Webhooks generic APIs: provide pass-throughs with safe fallbacks
+    def create_webhook(
+        self,
+        name: str,
+        url: str,
+        events,
+        description: str | None = None,
+        secret: str | None = None,
+        status: None | object = None,
+    ):
+        base_method = getattr(self._base, "create_webhook", None)
+        if callable(base_method):
+            try:
+                return base_method(
+                    name=name,
+                    url=url,
+                    events=events,
+                    description=description,
+                    secret=secret,
+                    status=status,
+                )
+            except NotImplementedError:
+                return None
+        return None
+
+    def get_webhook(self, webhook_id: str):
+        base_method = getattr(self._base, "get_webhook", None)
+        if callable(base_method):
+            try:
+                return base_method(webhook_id)
+            except NotImplementedError:
+                return None
+        return None
+
+    def list_webhooks(
+        self, max_results: int | None = None, page_token: str | None = None
+    ):
+        base_method = getattr(self._base, "list_webhooks", None)
+        if callable(base_method):
+            try:
+                return base_method(max_results=max_results, page_token=page_token)
+            except NotImplementedError:
+                return PagedList([], None)
+        return PagedList([], None)
+
+    def update_webhook(
+        self,
+        webhook_id: str,
+        name: str | None = None,
+        description: str | None = None,
+        url: str | None = None,
+        events=None,
+        secret: str | None = None,
+        status: None | object = None,
+    ):
+        base_method = getattr(self._base, "update_webhook", None)
+        if callable(base_method):
+            try:
+                return base_method(
+                    webhook_id,
+                    name=name,
+                    description=description,
+                    url=url,
+                    events=events,
+                    secret=secret,
+                    status=status,
+                )
+            except NotImplementedError:
+                return None
+        return None
+
+    def delete_webhook(self, webhook_id: str) -> None:
+        base_method = getattr(self._base, "delete_webhook", None)
+        if callable(base_method):
+            try:
+                return base_method(webhook_id)
+            except NotImplementedError:
+                return None
+        return None
+
+    def test_webhook(self, webhook_id: str, event=None):
+        base_method = getattr(self._base, "test_webhook", None)
+        if callable(base_method):
+            try:
+                return base_method(webhook_id, event=event)
+            except NotImplementedError:
+                return None
+        return None

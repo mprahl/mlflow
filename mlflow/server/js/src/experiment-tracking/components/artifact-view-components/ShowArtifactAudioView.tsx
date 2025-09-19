@@ -26,12 +26,20 @@ const ShowArtifactAudioView = ({ runUuid, path, getArtifact = getArtifactBlob }:
   useEffect(() => {
     if (!containerRef.current) return;
 
+    // Pre-fetch the audio via XHR to include headers (e.g., namespace), then provide an object URL
+    let objectUrl: string | undefined;
     const ws = WaveSurfer.create({
       mediaControls: true,
       container: containerRef.current,
       ...waveSurferStyling,
-      url: getArtifactLocationUrl(path, runUuid),
     });
+
+    getArtifactBlob(getArtifactLocationUrl(path, runUuid))
+      .then((blob) => {
+        objectUrl = URL.createObjectURL(blob);
+        ws.load(objectUrl);
+      })
+      .catch(() => setError(true));
 
     ws.on('ready', () => {
       setLoading(false);
@@ -44,6 +52,7 @@ const ShowArtifactAudioView = ({ runUuid, path, getArtifact = getArtifactBlob }:
     setWaveSurfer(ws);
 
     return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
       ws.destroy();
     };
   }, [containerRef, path, runUuid]);

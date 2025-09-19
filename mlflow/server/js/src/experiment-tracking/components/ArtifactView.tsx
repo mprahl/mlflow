@@ -41,7 +41,11 @@ import { getAllModelVersions } from '../../model-registry/reducers';
 import { listArtifactsApi, listArtifactsLoggedModelApi } from '../actions';
 import { MLMODEL_FILE_NAME } from '../constants';
 import { FallbackToLoggedModelArtifactsInfo } from './artifact-view-components/FallbackToLoggedModelArtifactsInfo';
-import { getArtifactLocationUrl, getLoggedModelArtifactLocationUrl } from '../../common/utils/ArtifactUtils';
+import {
+  getArtifactBlob,
+  getArtifactLocationUrl,
+  getLoggedModelArtifactLocationUrl,
+} from '../../common/utils/ArtifactUtils';
 import { ArtifactViewTree } from './ArtifactViewTree';
 import { useDesignSystemTheme } from '@databricks/design-system';
 import { Button } from '@databricks/design-system';
@@ -225,11 +229,29 @@ export class ArtifactViewImpl extends Component<ArtifactViewImplProps, ArtifactV
     isFallbackToLoggedModelArtifacts?: boolean,
   ) {
     // Logged model artifact API should be used when falling back to logged model artifacts on the run artifact page.
-    if (runUuid && !isFallbackToLoggedModelArtifacts) {
-      window.location.href = getArtifactLocationUrl(artifactPath, runUuid);
-    } else if (loggedModelId) {
-      window.location.href = getLoggedModelArtifactLocationUrl(artifactPath, loggedModelId);
-    }
+    const artifactUrl =
+      runUuid && !isFallbackToLoggedModelArtifacts
+        ? getArtifactLocationUrl(artifactPath, runUuid)
+        : loggedModelId
+        ? getLoggedModelArtifactLocationUrl(artifactPath, loggedModelId)
+        : undefined;
+
+    if (!artifactUrl) return;
+
+    // Fetch via XHR to include headers (e.g., X-MLflow-Namespace), then trigger download
+    getArtifactBlob(artifactUrl)
+      .then((blob) => {
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.href = url;
+        link.download = String(artifactPath || 'artifact');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      })
+      // eslint-disable-next-line no-console -- TODO(FEINF-3587)
+      .catch((e) => console.error(e));
   }
 
   renderControls() {
