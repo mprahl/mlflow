@@ -236,3 +236,10 @@ logging.basicConfig(level=logging.DEBUG)
 | PUT/PATCH   | `/update*`   | `update`  |
 | PUT/PATCH   | Other paths  | `update`  |
 | DELETE      | Any path     | `delete`  |
+
+## Open Questions/To Dos
+
+- It may be better to add the `mlflow.namespace` tag to every object and enforce this at creation time to avoid having to query for the parent resource. This seems less error prone and easier to maintain.
+- Add support for recording the user from the token. Example to get the current user's information: `curl -H "Authorization: Bearer $(oc whoami --show-token)" $(oc whoami --show-server)/apis/user.openshift.io/v1/users/~`. This should be configurable for the OpenShift user case and JWTs.
+- Add tests and documentation.
+- Add the Artifact Repository implementation with namespace isolation.
