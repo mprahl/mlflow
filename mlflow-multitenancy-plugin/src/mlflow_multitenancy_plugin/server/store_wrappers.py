@@ -28,6 +28,36 @@ def _require_namespace() -> str:
     return ns
 
 
+def _raise_if_namespace_tag_mutation(key_or_tag) -> None:
+    """Raise if a tag mutation targets the namespace tag.
+
+    Accepts either a tag object/dict with key/value or a raw key string.
+    """
+    try:
+        # tag object with .key
+        key = getattr(key_or_tag, "key", None)
+        if (
+            key is None
+            and isinstance(key_or_tag, (list, tuple))
+            and len(key_or_tag) >= 1
+        ):
+            key = key_or_tag[0]
+        if key is None and isinstance(key_or_tag, dict):
+            key = key_or_tag.get("key")
+        if key is None and isinstance(key_or_tag, str):
+            key = key_or_tag
+    except Exception:
+        key = None
+    if key == NAMESPACE_TAG_KEY:
+        from mlflow.exceptions import MlflowException
+        from mlflow.protos.databricks_pb2 import INVALID_PARAMETER_VALUE
+
+        raise MlflowException(
+            f"'{NAMESPACE_TAG_KEY}' is managed by the multitenancy plugin and cannot be modified",
+            error_code=INVALID_PARAMETER_VALUE,
+        )
+
+
 class NamespaceNameTransformer:
     """Handles transformation between user-visible and internal namespaced names."""
 
@@ -237,10 +267,12 @@ class NamespaceEnforcingTrackingStore(AbstractTrackingStore):
 
     def set_tag(self, run_id, tag):
         self._assert_run_in_namespace(run_id)
+        _raise_if_namespace_tag_mutation(tag)
         return self._base.set_tag(run_id, tag)
 
     def delete_tag(self, run_id, key):
         self._assert_run_in_namespace(run_id)
+        _raise_if_namespace_tag_mutation(key)
         return self._base.delete_tag(run_id, key)
 
     def log_batch(self, run_id, metrics, params, tags):
@@ -368,10 +400,17 @@ class NamespaceEnforcingTrackingStore(AbstractTrackingStore):
 
     def set_logged_model_tags(self, model_id: str, tags: list) -> None:
         self._assert_logged_model_in_namespace(model_id)
+        # Block attempts to set the namespace tag via bulk setter
+        try:
+            for t in tags or []:
+                _raise_if_namespace_tag_mutation(t)
+        except Exception:
+            pass
         return self._base.set_logged_model_tags(model_id, tags)
 
     def delete_logged_model_tag(self, model_id: str, key: str) -> None:
         self._assert_logged_model_in_namespace(model_id)
+        _raise_if_namespace_tag_mutation(key)
         return self._base.delete_logged_model_tag(model_id, key)
 
     def finalize_logged_model(self, model_id: str, status):
@@ -406,12 +445,14 @@ class NamespaceEnforcingTrackingStore(AbstractTrackingStore):
         exp = self.get_experiment(experiment_id)
         if not exp:
             return self._base.set_experiment_tag(experiment_id, tag)
+        _raise_if_namespace_tag_mutation(tag)
         return self._base.set_experiment_tag(experiment_id, tag)
 
     def delete_experiment_tag(self, experiment_id, key):
         exp = self.get_experiment(experiment_id)
         if not exp:
             return self._base.delete_experiment_tag(experiment_id, key)
+        _raise_if_namespace_tag_mutation(key)
         return self._base.delete_experiment_tag(experiment_id, key)
 
     # Traces API: provide a safe namespaced implementation if base supports it, otherwise
@@ -450,6 +491,7 @@ class NamespaceEnforcingTrackingStore(AbstractTrackingStore):
         return [], None
 
     def set_trace_tag(self, trace_id: str, key: str, value: str):
+        _raise_if_namespace_tag_mutation(key)
         base_method = getattr(self._base, "set_trace_tag", None)
         if callable(base_method):
             try:
@@ -459,6 +501,7 @@ class NamespaceEnforcingTrackingStore(AbstractTrackingStore):
         return None
 
     def delete_trace_tag(self, trace_id: str, key: str):
+        _raise_if_namespace_tag_mutation(key)
         base_method = getattr(self._base, "delete_trace_tag", None)
         if callable(base_method):
             try:
@@ -671,6 +714,13 @@ class NamespaceEnforcingTrackingStore(AbstractTrackingStore):
         base_method = getattr(self._base, "set_dataset_tags", None)
         if callable(base_method):
             try:
+                # Prevent modifying the namespace tag
+                try:
+                    keys = list((tags or {}).keys())
+                except Exception:
+                    keys = []
+                for k in keys:
+                    _raise_if_namespace_tag_mutation(k)
                 return base_method(dataset_id, tags)
             except NotImplementedError:
                 return None
@@ -680,6 +730,7 @@ class NamespaceEnforcingTrackingStore(AbstractTrackingStore):
         base_method = getattr(self._base, "delete_dataset_tag", None)
         if callable(base_method):
             try:
+                _raise_if_namespace_tag_mutation(key)
                 return base_method(dataset_id, key)
             except NotImplementedError:
                 return None
@@ -1031,20 +1082,24 @@ class NamespaceEnforcingModelRegistryStore(AbstractModelRegistryStore):
 
     def set_model_version_tag(self, name, version, tag):
         self.get_registered_model(name)
+        _raise_if_namespace_tag_mutation(tag)
         return self._base.set_model_version_tag(_to_internal_name(name), version, tag)
 
     def delete_model_version_tag(self, name, version, key):
         self.get_registered_model(name)
+        _raise_if_namespace_tag_mutation(key)
         return self._base.delete_model_version_tag(
             _to_internal_name(name), version, key
         )
 
     def set_registered_model_tag(self, name, tag):
         self.get_registered_model(name)
+        _raise_if_namespace_tag_mutation(tag)
         return self._base.set_registered_model_tag(_to_internal_name(name), tag)
 
     def delete_registered_model_tag(self, name, key):
         self.get_registered_model(name)
+        _raise_if_namespace_tag_mutation(key)
         return self._base.delete_registered_model_tag(_to_internal_name(name), key)
 
     def set_registered_model_alias(self, name, alias, version):
