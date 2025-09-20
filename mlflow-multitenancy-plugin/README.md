@@ -115,10 +115,13 @@ Use the `ns:` prefix to enable namespace-aware stores:
 
 1. **Request Interception**: Middleware extracts namespace from `X-MLflow-Namespace` header
 2. **Token Validation**: Bearer token extracted from `Authorization` header
-3. **SSAR Check**: Kubernetes SelfSubjectAccessReview validates permissions
-4. **Resource Mapping**: Request paths mapped to MLflow resources (experiments, models, prompts)
-5. **Verb Determination**: HTTP methods mapped to RBAC verbs (get, list, create, update, delete)
-6. **Namespace Scoping**: Store operations automatically scoped to authorized namespace
+3. **User Resolution**: The plugin attempts to derive a user identity from the token:
+   - Parses JWT payload for common claims (email, preferred_username, username, name, upn, sub)
+   - Optionally falls back to OpenShift user API (`/apis/user.openshift.io/v1/users/~`) when enabled
+4. **SSAR Check**: Kubernetes SelfSubjectAccessReview validates permissions
+5. **Resource Mapping**: Request paths mapped to MLflow resources (experiments, models, prompts)
+6. **Verb Determination**: HTTP methods mapped to RBAC verbs (get, list, create, update, delete)
+7. **Namespace Scoping**: Store operations automatically scoped to authorized namespace
 
 ### Kubernetes RBAC Setup
 
@@ -155,11 +158,22 @@ roleRef:
 
 ### Environment Variables (Server)
 
-| Variable                              | Description                 | Default       |
-| ------------------------------------- | --------------------------- | ------------- |
-| `MLFLOW_K8S_API`                      | Kubernetes API server URL   | Auto-detected |
-| `MLFLOW_K8S_CA_FILE`                  | Path to CA certificate file | Auto-detected |
-| `MLFLOW_K8S_INSECURE_SKIP_TLS_VERIFY` | Skip TLS verification       | `false`       |
+| Variable                              | Description                           | Default       |
+| ------------------------------------- | ------------------------------------- | ------------- |
+| `MLFLOW_K8S_API`                      | Kubernetes API server URL             | Auto-detected |
+| `MLFLOW_K8S_CA_FILE`                  | Path to CA certificate file           | Auto-detected |
+| `MLFLOW_K8S_INSECURE_SKIP_TLS_VERIFY` | Skip TLS verification                 | `false`       |
+| `MLFLOW_OPENSHIFT_USERINFO_FALLBACK`  | Enable OpenShift user lookup fallback | `false`       |
+
+When enabled, the OpenShift fallback uses the same bearer token from the request to query the OpenShift user API at `<K8S_API>/apis/user.openshift.io/v1/users/~` and record the resolved user on the request context. If JWT parsing succeeds, the fallback is not used.
+
+### User attribution and auditing
+
+- The server resolves the user from the incoming token (JWT claims or OpenShift fallback).
+- For runs, the plugin always prefers this resolved user over any client-provided value:
+  - `create_run.user_id` is overridden with the resolved user.
+  - The `mlflow.user` run tag is ensured to match the resolved user.
+  - This guarantees consistent auditing regardless of client behavior.
 
 ### Namespace Validation
 
@@ -176,7 +190,7 @@ Namespaces must follow Kubernetes naming conventions:
 
 #### Flask WSGI Error
 
-```
+```text
 Flask.__call__() missing 1 required positional argument: 'start_response'
 ```
 
@@ -184,7 +198,7 @@ Flask.__call__() missing 1 required positional argument: 'start_response'
 
 #### Authorization Failures
 
-```
+```text
 Access denied by SSAR: Forbidden
 ```
 
@@ -196,7 +210,7 @@ Access denied by SSAR: Forbidden
 
 #### Token Extraction Issues
 
-```
+```text
 Missing bearer token for authorization
 ```
 
@@ -240,6 +254,6 @@ logging.basicConfig(level=logging.DEBUG)
 ## Open Questions/To Dos
 
 - It may be better to add the `mlflow.namespace` tag to every object and enforce this at creation time to avoid having to query for the parent resource. This seems less error prone and easier to maintain.
-- Add support for recording the user from the token. Example to get the current user's information: `curl -H "Authorization: Bearer $(oc whoami --show-token)" $(oc whoami --show-server)/apis/user.openshift.io/v1/users/~`. This should be configurable for the OpenShift user case and JWTs.
 - Add tests and documentation.
-- Add the Artifact Repository implementation with namespace isolation.
+- Add support for uvicorn
+- Evaluate experiment custom artifact path and how it cross namespace boundaries. Perhaps enforce a namespace prefix.

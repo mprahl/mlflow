@@ -118,11 +118,13 @@ spec:
             - --port=9443
             - --workers=1
             - --gunicorn-opts
-            - "--certfile=/etc/tls/tls.crt --keyfile=/etc/tls/tls.key"
+            - "--certfile=/etc/tls/tls.crt --keyfile=/etc/tls/tls.key --log-level debug --capture-output"
             - --app-name=multitenancy
           env:
             - name: HOME
               value: /tmp
+            - name: MLFLOW_OPENSHIFT_USERINFO_FALLBACK
+              value: "true"
           ports:
             - name: https-direct
               containerPort: 9443

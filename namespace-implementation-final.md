@@ -65,6 +65,7 @@ Final design: all multitenancy logic lives in a separate plugin package with no 
 ### Env vars (plugin)
 
 - K8s connectivity: `MLFLOW_K8S_API`, `MLFLOW_K8S_CA_FILE`, `MLFLOW_K8S_INSECURE_SKIP_TLS_VERIFY` (optional).
+- User resolution fallback (OpenShift): `MLFLOW_OPENSHIFT_USERINFO_FALLBACK` (boolean)
 - UI dev-only token: `localStorage.setItem('mlflow.k8s.bearerToken', '<token>')`.
 
 ### Not included

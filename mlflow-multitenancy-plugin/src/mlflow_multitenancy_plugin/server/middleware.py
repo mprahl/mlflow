@@ -4,7 +4,10 @@ from flask import request, jsonify, g
 import os
 import re
 
-from mlflow_multitenancy_plugin.server.ssar import authorize_request
+from mlflow_multitenancy_plugin.server.ssar import (
+    authorize_request,
+    resolve_request_user,
+)
 
 
 def _validate_namespace(namespace: str) -> bool:
@@ -93,6 +96,15 @@ def install(app):
             )
 
         g.mlflow_namespace = namespace
+        # Resolve user only for endpoints that require it (create run, log-batch)
+        if method == "POST" and ("/runs/create" in lower or "/runs/log-batch" in lower):
+            try:
+                g.mlflow_user = resolve_request_user(request)
+            except Exception:
+                g.mlflow_user = None
+        else:
+            # Skip setting since we don't need it for other endpoints
+            g.mlflow_user = None
 
         # Analyze request to determine resource type and verb
         analyzer = RequestAnalyzer(path, method)

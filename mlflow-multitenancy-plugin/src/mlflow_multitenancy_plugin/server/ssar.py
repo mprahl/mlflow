@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Optional, List
+from typing import Optional, List, Any, Dict
 
 try:
     from kubernetes import client as k8s_client, config as k8s_config  # type: ignore
@@ -10,12 +10,25 @@ except Exception:  # pragma: no cover - optional dependency
     k8s_client = None  # type: ignore
     k8s_config = None  # type: ignore
 from flask import Request
+import base64
+import json as jsonlib
+import urllib.request
+import ssl
+import logging
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 # These env lookups mirror server behavior
 MLFLOW_K8S_API = os.environ.get("MLFLOW_K8S_API")
 MLFLOW_K8S_CA_FILE = os.environ.get("MLFLOW_K8S_CA_FILE")
 MLFLOW_K8S_INSECURE_SKIP_TLS_VERIFY = os.environ.get(
     "MLFLOW_K8S_INSECURE_SKIP_TLS_VERIFY"
+) in ("1", "true", "True")
+
+# Optional OpenShift userinfo fallback configuration
+MLFLOW_OPENSHIFT_USERINFO_FALLBACK = os.environ.get(
+    "MLFLOW_OPENSHIFT_USERINFO_FALLBACK"
 ) in ("1", "true", "True")
 
 
@@ -27,43 +40,27 @@ def _raise_perm_denied(message: str):
 
 
 def _get_k8s_api_server() -> str:
+    # Explicit override takes precedence
     if MLFLOW_K8S_API:
         return MLFLOW_K8S_API.rstrip("/")
-    if os.getenv("KUBERNETES_SERVICE_HOST"):
-        return "https://kubernetes.default.svc"
-    # Kubeconfig fallback
-    for path in [
-        *(
-            os.getenv("KUBECONFIG", "").split(os.pathsep)
-            if os.getenv("KUBECONFIG")
-            else []
-        ),
-        os.path.join(os.path.expanduser("~"), ".kube", "config"),
-    ]:
+    # Try in-cluster, then kubeconfig; fail otherwise
+    if not (k8s_config and k8s_client):
+        raise RuntimeError(
+            "Kubernetes client not available for configuration resolution"
+        )
+    cfg = k8s_client.Configuration()
+    try:
+        k8s_config.load_incluster_config(client_configuration=cfg)
+    except Exception:
         try:
-            import yaml  # type: ignore
-
-            if os.path.isfile(path):
-                with open(path, "r", encoding="utf-8") as f:
-                    cfg = yaml.safe_load(f) or {}
-                ctx = cfg.get("current-context")
-                if not ctx:
-                    continue
-                contexts = {
-                    c.get("name"): c.get("context", {})
-                    for c in (cfg.get("contexts") or [])
-                }
-                cluster_name = (contexts.get(ctx) or {}).get("cluster")
-                clusters = {
-                    c.get("name"): c.get("cluster", {})
-                    for c in (cfg.get("clusters") or [])
-                }
-                server = (clusters.get(cluster_name) or {}).get("server")
-                if isinstance(server, str) and server:
-                    return server.rstrip("/")
-        except Exception:
-            continue
-    return "https://kubernetes.default.svc"
+            k8s_config.load_kube_config(client_configuration=cfg)
+        except Exception as e:
+            raise RuntimeError(
+                "Failed to load Kubernetes configuration (in-cluster and kubeconfig)"
+            ) from e
+    if isinstance(getattr(cfg, "host", None), str) and cfg.host:
+        return cfg.host.rstrip("/")
+    raise RuntimeError("Kubernetes configuration missing API server host")
 
 
 def _get_verify() -> bool | str:
@@ -94,6 +91,97 @@ def _extract_bearer_token(flask_request: Request) -> Optional[str]:
             return cookie_token.strip()
     except Exception:
         pass
+    return None
+
+
+def _b64url_decode(segment: str) -> bytes:
+    # Add necessary padding for base64 urlsafe decoding
+    padding = "=" * (-len(segment) % 4)
+    return base64.urlsafe_b64decode(segment + padding)
+
+
+def _decode_jwt_payload(token: str) -> Optional[Dict[str, Any]]:
+    try:
+        parts = token.split(".")
+        if len(parts) < 2:
+            logger.debug("JWT parse: token missing segments; skipping decode")
+            return None
+        payload_bytes = _b64url_decode(parts[1])
+        payload = jsonlib.loads(payload_bytes.decode("utf-8"))
+        logger.debug(
+            "JWT parse: payload decoded; keys=%s",
+            list(payload.keys()) if isinstance(payload, dict) else "non-dict",
+        )
+        return payload
+    except Exception:
+        logger.debug("JWT parse: failed to decode payload", exc_info=True)
+        return None
+
+
+def _select_user_from_claims(claims: Dict[str, Any]) -> Optional[str]:
+    if not isinstance(claims, dict):
+        return None
+    candidate_keys = [
+        "username",
+        "email",
+        "sub",
+    ]
+    for key in candidate_keys:
+        val = claims.get(key)
+        if isinstance(val, str) and val.strip():
+            logger.debug("JWT claims: selected '%s' for user", key)
+            return val.strip()
+    logger.debug("JWT claims: no suitable user claim found; checked %s", candidate_keys)
+    return None
+
+
+def _fetch_openshift_current_user(token: str) -> Optional[str]:
+    try:
+        base_url = f"{_get_k8s_api_server()}/apis/user.openshift.io/v1/users/~"
+        req = urllib.request.Request(base_url)
+        req.add_header("Authorization", f"Bearer {token}")
+        verify = _get_verify()
+        context: Optional[ssl.SSLContext]
+        if verify is False:
+            context = ssl._create_unverified_context()
+        elif isinstance(verify, str):
+            context = ssl.create_default_context(cafile=verify)
+        else:
+            context = ssl.create_default_context()
+        with urllib.request.urlopen(req, context=context, timeout=5) as resp:
+            code = resp.getcode()
+            logger.debug("OpenShift userinfo: HTTP %s from %s", code, base_url)
+            data = jsonlib.loads(resp.read().decode("utf-8"))
+            if not isinstance(data, dict):
+                return None
+            user = data.get("metadata", {}).get("name", None)
+            logger.debug("OpenShift userinfo: resolved user=%s", bool(user))
+            return user
+    except Exception:
+        logger.debug("OpenShift userinfo: request failed", exc_info=True)
+        return None
+
+
+def resolve_request_user(flask_request: Request) -> Optional[str]:
+    """Resolve the user identity from the incoming request.
+
+    Strategy:
+    1) If the bearer token is a JWT, attempt to parse common identity claims
+    2) If enabled via env, fall back to OpenShift userinfo endpoint
+    """
+    token = _extract_bearer_token(flask_request)
+    if not token:
+        logger.debug("User resolution: no bearer token present")
+        return None
+    claims = _decode_jwt_payload(token)
+    user = _select_user_from_claims(claims or {}) if claims else None
+    if user:
+        logger.debug("User resolution: resolved via JWT claims")
+        return user
+    if MLFLOW_OPENSHIFT_USERINFO_FALLBACK:
+        logger.debug("User resolution: attempting OpenShift fallback")
+        user = _fetch_openshift_current_user(token)
+        return user
     return None
 
 

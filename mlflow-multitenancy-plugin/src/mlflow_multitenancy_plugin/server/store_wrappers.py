@@ -4,7 +4,7 @@ from typing import Iterable, Optional, List, Dict, Any
 
 from flask import g
 
-from mlflow.entities import Experiment, ViewType
+from mlflow.entities import Experiment, ViewType, RunTag
 from mlflow.store.tracking import (
     SEARCH_MAX_RESULTS_DEFAULT,
     SEARCH_TRACES_DEFAULT_MAX_RESULTS,
@@ -18,6 +18,7 @@ from mlflow.store.model_registry.abstract_store import (
 
 
 NAMESPACE_TAG_KEY = "mlflow.namespace"
+USER_TAG_KEY = "mlflow.user"
 
 
 def _require_namespace() -> str:
@@ -54,6 +55,35 @@ def _raise_if_namespace_tag_mutation(key_or_tag) -> None:
 
         raise MlflowException(
             f"'{NAMESPACE_TAG_KEY}' is managed by the multitenancy plugin and cannot be modified",
+            error_code=INVALID_PARAMETER_VALUE,
+        )
+
+
+def _raise_if_user_tag_mutation(key_or_tag) -> None:
+    """Raise if a tag mutation targets the user tag on runs.
+
+    Accepts either a tag object/dict with key/value or a raw key string.
+    """
+    try:
+        key = getattr(key_or_tag, "key", None)
+        if (
+            key is None
+            and isinstance(key_or_tag, (list, tuple))
+            and len(key_or_tag) >= 1
+        ):
+            key = key_or_tag[0]
+        if key is None and isinstance(key_or_tag, dict):
+            key = key_or_tag.get("key")
+        if key is None and isinstance(key_or_tag, str):
+            key = key_or_tag
+    except Exception:
+        key = None
+    if key == USER_TAG_KEY:
+        from mlflow.exceptions import MlflowException
+        from mlflow.protos.databricks_pb2 import INVALID_PARAMETER_VALUE
+
+        raise MlflowException(
+            f"'{USER_TAG_KEY}' is managed by the server and cannot be modified",
             error_code=INVALID_PARAMETER_VALUE,
         )
 
@@ -195,7 +225,8 @@ class NamespaceEnforcingTrackingStore(AbstractTrackingStore):
             )
         try:
             if exp and getattr(exp, "name", None):
-                exp.name = _from_internal_name(exp.name)
+                new_name = _from_internal_name(exp.name)
+                exp._set_name(new_name)
         except Exception:
             pass
         return exp
@@ -213,7 +244,8 @@ class NamespaceEnforcingTrackingStore(AbstractTrackingStore):
             return None
         try:
             if getattr(exp, "name", None):
-                exp.name = _from_internal_name(exp.name)
+                new_name = _from_internal_name(exp.name)
+                exp._set_name(new_name)
         except Exception:
             pass
         return exp
@@ -221,6 +253,35 @@ class NamespaceEnforcingTrackingStore(AbstractTrackingStore):
     def create_run(self, experiment_id, user_id, start_time, tags, run_name):
         # Ensure the parent experiment belongs to the current namespace before creating the run
         self.get_experiment(experiment_id)
+        # Always prefer resolved request user for auditing
+        try:
+            resolved_user = getattr(g, "mlflow_user", None)
+        except Exception:
+            resolved_user = None
+        if isinstance(resolved_user, str) and resolved_user.strip():
+            user_id = resolved_user.strip()
+            # Ensure the mlflow.user run tag matches the resolved user
+            try:
+                existing = []
+                replaced = False
+                for t in tags or []:
+                    try:
+                        key = getattr(t, "key", None)
+                        if key is None and isinstance(t, (list, tuple)) and len(t) == 2:
+                            key = t[0]
+                        if key == "mlflow.user":
+                            existing.append(RunTag("mlflow.user", user_id))
+                            replaced = True
+                        else:
+                            existing.append(t)
+                    except Exception:
+                        existing.append(t)
+                if not replaced:
+                    existing = list(existing or []) + [RunTag("mlflow.user", user_id)]
+                tags = existing
+            except Exception:
+                # Best-effort tag synchronization
+                pass
         return self._base.create_run(
             experiment_id=experiment_id,
             user_id=user_id,
@@ -268,15 +329,37 @@ class NamespaceEnforcingTrackingStore(AbstractTrackingStore):
     def set_tag(self, run_id, tag):
         self._assert_run_in_namespace(run_id)
         _raise_if_namespace_tag_mutation(tag)
+        _raise_if_user_tag_mutation(tag)
         return self._base.set_tag(run_id, tag)
 
     def delete_tag(self, run_id, key):
         self._assert_run_in_namespace(run_id)
         _raise_if_namespace_tag_mutation(key)
+        _raise_if_user_tag_mutation(key)
         return self._base.delete_tag(run_id, key)
 
     def log_batch(self, run_id, metrics, params, tags):
         self._assert_run_in_namespace(run_id)
+        # Prevent client from spoofing mlflow.user and keep it consistent
+        try:
+            filtered_tags = []
+            for t in tags or []:
+                try:
+                    key = getattr(t, "key", None)
+                    if key is None and isinstance(t, (list, tuple)) and len(t) == 2:
+                        key = t[0]
+                    if key == USER_TAG_KEY:
+                        continue
+                except Exception:
+                    pass
+                filtered_tags.append(t)
+            # Ensure mlflow.user tag is present and correct if we have a resolved user
+            resolved_user = getattr(g, "mlflow_user", None)
+            if isinstance(resolved_user, str) and resolved_user.strip():
+                filtered_tags.append(RunTag(USER_TAG_KEY, resolved_user.strip()))
+            tags = filtered_tags
+        except Exception:
+            pass
         return self._base.log_batch(run_id, metrics, params, tags)
 
     def log_param(self, run_id, param):
@@ -318,9 +401,6 @@ class NamespaceEnforcingTrackingStore(AbstractTrackingStore):
         filter_string = (
             f"{filter_string} AND {filter_ns}" if filter_string else filter_ns
         )
-        return self._base.search_experiments(
-            view_type, max_results, filter_string, order_by, page_token
-        )
         # Ensure returned experiments expose user-visible names
         res = self._base.search_experiments(
             view_type, max_results, filter_string, order_by, page_token
@@ -328,7 +408,8 @@ class NamespaceEnforcingTrackingStore(AbstractTrackingStore):
         try:
             for e in res or []:
                 if getattr(e, "name", None):
-                    e.name = _from_internal_name(e.name)
+                    new_name = _from_internal_name(e.name)
+                    e._set_name(new_name)
         except Exception:
             pass
         return res
@@ -943,7 +1024,8 @@ class NamespaceEnforcingModelRegistryStore(AbstractModelRegistryStore):
                 "Registered model not in namespace", error_code=PERMISSION_DENIED
             )
         try:
-            rm.name = _from_internal_name(rm.name)
+            new_name = _from_internal_name(rm.name)
+            rm.name = new_name
         except Exception:
             pass
         return rm
@@ -953,7 +1035,8 @@ class NamespaceEnforcingModelRegistryStore(AbstractModelRegistryStore):
         res = self._base.get_latest_versions(_to_internal_name(name), stages)
         for mv in res:
             try:
-                mv.name = _from_internal_name(mv.name)
+                new_name = _from_internal_name(mv.name)
+                mv.name = new_name
             except Exception:
                 pass
         return res
@@ -1010,14 +1093,16 @@ class NamespaceEnforcingModelRegistryStore(AbstractModelRegistryStore):
                         latest, key=lambda mv: int(getattr(mv, "version", 0) or 0)
                     )
                     try:
-                        best.name = _from_internal_name(best.name)
+                        new_name = _from_internal_name(best.name)
+                        best.name = new_name
                     except Exception:
                         pass
                     return best
             except Exception:
                 pass
         try:
-            result.name = _from_internal_name(result.name)
+            new_name = _from_internal_name(result.name)
+            result.name = new_name
         except Exception:
             pass
         return result
@@ -1044,7 +1129,8 @@ class NamespaceEnforcingModelRegistryStore(AbstractModelRegistryStore):
         self.get_registered_model(name)
         mv = self._base.get_model_version(_to_internal_name(name), version)
         try:
-            mv.name = _from_internal_name(mv.name)
+            new_name = _from_internal_name(mv.name)
+            mv.name = new_name
         except Exception:
             pass
         return mv
@@ -1073,7 +1159,8 @@ class NamespaceEnforcingModelRegistryStore(AbstractModelRegistryStore):
             items = []
             for mv in res:
                 try:
-                    mv.name = _from_internal_name(mv.name)
+                    new_name = _from_internal_name(mv.name)
+                    mv.name = new_name
                 except Exception:
                     pass
                 items.append(mv)
@@ -1116,7 +1203,8 @@ class NamespaceEnforcingModelRegistryStore(AbstractModelRegistryStore):
         self.get_registered_model(name)
         mv = self._base.get_model_version_by_alias(_to_internal_name(name), alias)
         try:
-            mv.name = _from_internal_name(mv.name)
+            new_name = _from_internal_name(mv.name)
+            mv.name = new_name
         except Exception:
             pass
         return mv
