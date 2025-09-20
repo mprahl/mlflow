@@ -148,7 +148,9 @@ class NamespaceEnforcingTrackingStore(AbstractTrackingStore):
     # Experiments
     def create_experiment(self, name, artifact_location, tags):
         tags = _ensure_top_level_has_namespace(tags)
-        return self._base.create_experiment(name, artifact_location, tags)
+        return self._base.create_experiment(
+            _to_internal_name(name), artifact_location, tags
+        )
 
     def get_experiment(self, experiment_id):
         exp: Experiment = self._base.get_experiment(experiment_id)
@@ -161,10 +163,17 @@ class NamespaceEnforcingTrackingStore(AbstractTrackingStore):
             raise MlflowException(
                 "Experiment not in namespace", error_code=PERMISSION_DENIED
             )
+        try:
+            if exp and getattr(exp, "name", None):
+                exp.name = _from_internal_name(exp.name)
+        except Exception:
+            pass
         return exp
 
     def get_experiment_by_name(self, name):
-        exp: Experiment = getattr(self._base, "get_experiment_by_name")(name)
+        exp: Experiment = getattr(self._base, "get_experiment_by_name")(
+            _to_internal_name(name)
+        )
         if not exp:
             return exp
         ns = _require_namespace()
@@ -172,6 +181,11 @@ class NamespaceEnforcingTrackingStore(AbstractTrackingStore):
         if tag_map.get(NAMESPACE_TAG_KEY) != ns:
             # Hide experiments from other namespaces
             return None
+        try:
+            if getattr(exp, "name", None):
+                exp.name = _from_internal_name(exp.name)
+        except Exception:
+            pass
         return exp
 
     def create_run(self, experiment_id, user_id, start_time, tags, run_name):
@@ -196,7 +210,7 @@ class NamespaceEnforcingTrackingStore(AbstractTrackingStore):
 
     def rename_experiment(self, experiment_id, new_name):
         self.get_experiment(experiment_id)
-        return self._base.rename_experiment(experiment_id, new_name)
+        return self._base.rename_experiment(experiment_id, _to_internal_name(new_name))
 
     def _assert_run_in_namespace(self, run_id):
         run = self._base.get_run(run_id)
@@ -275,6 +289,17 @@ class NamespaceEnforcingTrackingStore(AbstractTrackingStore):
         return self._base.search_experiments(
             view_type, max_results, filter_string, order_by, page_token
         )
+        # Ensure returned experiments expose user-visible names
+        res = self._base.search_experiments(
+            view_type, max_results, filter_string, order_by, page_token
+        )
+        try:
+            for e in res or []:
+                if getattr(e, "name", None):
+                    e.name = _from_internal_name(e.name)
+        except Exception:
+            pass
+        return res
 
     # Runs: rely on parent experiment scoping; no tag injection
     def _search_runs(
