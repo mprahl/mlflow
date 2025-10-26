@@ -42,8 +42,11 @@ class EvaluationDataset(_MlflowObject, Dataset, PyFuncConvertibleDatasetMixin):
         profile: str | None = None,
         created_by: str | None = None,
         last_updated_by: str | None = None,
+        workspace: str | None = None,
     ):
         """Initialize the EvaluationDataset."""
+        from mlflow.utils.workspace_utils import DEFAULT_WORKSPACE_NAME
+
         self.dataset_id = dataset_id
         self.created_time = created_time
         self.last_update_time = last_update_time
@@ -52,6 +55,7 @@ class EvaluationDataset(_MlflowObject, Dataset, PyFuncConvertibleDatasetMixin):
         self._profile = profile
         self.created_by = created_by
         self.last_updated_by = last_updated_by
+        self._workspace = workspace or DEFAULT_WORKSPACE_NAME
         self._experiment_ids = None
         self._records = None
 
@@ -83,6 +87,13 @@ class EvaluationDataset(_MlflowObject, Dataset, PyFuncConvertibleDatasetMixin):
         Dataset profile information.
         """
         return self._profile
+
+    @property
+    def workspace(self) -> str:
+        """
+        Workspace name for the dataset.
+        """
+        return self._workspace
 
     @property
     def experiment_ids(self) -> list[str]:
@@ -416,6 +427,7 @@ class EvaluationDataset(_MlflowObject, Dataset, PyFuncConvertibleDatasetMixin):
                 "created_by": self.created_by,
                 "last_updated_by": self.last_updated_by,
                 "experiment_ids": self.experiment_ids,
+                "workspace": self.workspace,
             }
         )
 
@@ -448,6 +460,7 @@ class EvaluationDataset(_MlflowObject, Dataset, PyFuncConvertibleDatasetMixin):
             profile=data.get("profile"),
             created_by=data.get("created_by"),
             last_updated_by=data.get("last_updated_by"),
+            workspace=data.get("workspace"),
         )
         if "experiment_ids" in data:
             dataset._experiment_ids = data["experiment_ids"]

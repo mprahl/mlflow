@@ -8,16 +8,19 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import jwt
 import psutil
 import pytest
 import requests
+from flask import Response, request
 
 import mlflow
 from mlflow import MlflowClient
 from mlflow.entities.logged_model_status import LoggedModelStatus
 from mlflow.environment_variables import (
+    MLFLOW_ENABLE_WORKSPACES,
     MLFLOW_FLASK_SERVER_SECRET_KEY,
     MLFLOW_TRACKING_PASSWORD,
     MLFLOW_TRACKING_USERNAME,
@@ -28,8 +31,22 @@ from mlflow.protos.databricks_pb2 import (
     UNAUTHENTICATED,
     ErrorCode,
 )
-from mlflow.server.auth.routes import GET_REGISTERED_MODEL_PERMISSION
+from mlflow.server import auth as auth_module
+from mlflow.server.auth.permissions import MANAGE, NO_PERMISSIONS, READ
+from mlflow.server.auth.routes import (
+    CREATE_PROMPTLAB_RUN,
+    GATEWAY_PROXY,
+    GET_ARTIFACT,
+    GET_METRIC_HISTORY_BULK,
+    GET_METRIC_HISTORY_BULK_INTERVAL,
+    GET_MODEL_VERSION_ARTIFACT,
+    GET_REGISTERED_MODEL_PERMISSION,
+    GET_TRACE_ARTIFACT,
+    SEARCH_DATASETS,
+    UPLOAD_ARTIFACT,
+)
 from mlflow.utils.os import is_windows
+from mlflow.utils.workspace_utils import DEFAULT_WORKSPACE_NAME
 
 from tests.helper_functions import random_str
 from tests.server.auth.auth_test_utils import ADMIN_PASSWORD, ADMIN_USERNAME, User, create_user
@@ -82,6 +99,37 @@ def test_authenticate(client, monkeypatch):
 def test_validate_username_and_password(client, username, password):
     with pytest.raises(requests.exceptions.HTTPError, match=r"BAD REQUEST"):
         create_user(client.tracking_uri, username=username, password=password)
+
+
+def test_workspace_prefixed_flask_routes_have_validators():
+    validators = auth_module.BEFORE_REQUEST_VALIDATORS
+    routes = [
+        (GET_ARTIFACT, "GET"),
+        (GET_MODEL_VERSION_ARTIFACT, "GET"),
+        (GET_TRACE_ARTIFACT, "GET"),
+        (GET_METRIC_HISTORY_BULK, "GET"),
+        (GET_METRIC_HISTORY_BULK_INTERVAL, "GET"),
+        (SEARCH_DATASETS, "POST"),
+        (CREATE_PROMPTLAB_RUN, "POST"),
+        (GATEWAY_PROXY, "GET"),
+        (GATEWAY_PROXY, "POST"),
+        (UPLOAD_ARTIFACT, "POST"),
+    ]
+
+    for path, method in routes:
+        workspace_path = auth_module._workspace_prefixed_path(path)
+        assert (path, method) in validators
+        if workspace_path != path:
+            assert (workspace_path, method) in validators
+
+
+def test_flask_route_validator_registry_matches_before_request_validators():
+    validators = auth_module.BEFORE_REQUEST_VALIDATORS
+    for path, method, validator in auth_module._FLASK_ROUTE_VALIDATORS:
+        workspace_path = auth_module._workspace_prefixed_path(path)
+        assert validators[(path, method)] is validator
+        if workspace_path != path:
+            assert validators[(workspace_path, method)] is validator
 
 
 def _mlflow_search_experiments_rest(base_uri, headers):
@@ -331,6 +379,7 @@ def test_create_and_delete_registered_model(client, monkeypatch):
     permission = response.json()["registered_model_permission"]
     assert permission["name"] == rm.name
     assert permission["permission"] == "MANAGE"
+    assert permission["workspace"] == DEFAULT_WORKSPACE_NAME
 
     # trying to create a model with the same name should fail
     with User(username1, password1, monkeypatch):
@@ -352,15 +401,41 @@ def test_create_and_delete_registered_model(client, monkeypatch):
 
     assert response.status_code == 404
     assert response.json()["error_code"] == ErrorCode.Name(RESOURCE_DOES_NOT_EXIST)
-    assert (
-        response.json()["message"]
-        == f"Registered model permission with name={rm.name} and username={username1} not found"
+    expected_message = (
+        "Registered model permission with "
+        f"workspace={DEFAULT_WORKSPACE_NAME}, name={rm.name} "
+        f"and username={username1} not found"
     )
+    assert response.json()["message"] == expected_message
 
     # now we should be able to create a model with the same name
     with User(username1, password1, monkeypatch):
         rm = client.create_registered_model("test_model")
     assert rm.name == "test_model"
+
+
+def test_cleanup_workspace_permissions_handler(monkeypatch):
+    calls: list[str] = []
+
+    def mock_delete(workspace_name: str) -> None:
+        calls.append(workspace_name)
+
+    monkeypatch.setattr(
+        auth_module.store,
+        "delete_workspace_permissions_for_workspace",
+        mock_delete,
+        raising=True,
+    )
+
+    workspace_name = f"team-{random_str(10)}"
+    with auth_module.app.test_request_context(
+        f"/api/2.0/mlflow/workspaces/{workspace_name}", method="DELETE"
+    ):
+        request.view_args = {"workspace_name": workspace_name}
+        response = Response(status=204)
+        auth_module._after_request(response)
+
+    assert calls == [workspace_name]
 
 
 def _wait(url: str):

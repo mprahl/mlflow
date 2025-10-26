@@ -100,6 +100,7 @@ from mlflow.server.handlers import (
     _log_batch,
     _register_scorer,
     _rename_registered_model,
+    _resolve_rbac_resource_type,
     _search_evaluation_datasets_handler,
     _search_experiments,
     _search_logged_models,
@@ -236,6 +237,36 @@ def test_convert_path_parameter_to_flask_format():
 
     converted = _convert_path_parameter_to_flask_format("/mlflow/{foo}/{bar}/{baz}")
     assert "/mlflow/<foo>/<bar>/<baz>" == converted
+
+
+@pytest.mark.parametrize(
+    ("path", "operation", "expected"),
+    [
+        ("/graphql", "MlflowGetExperimentQuery", "experiments"),
+        ("/graphql", "GetExperiment", "experiments"),
+        ("/graphql", "GetRun", "experiments"),
+        ("/graphql", "MlflowGetRunQuery", "experiments"),
+        ("/graphql", "SearchRuns", "experiments"),
+        ("/graphql", "MlflowSearchRunsQuery", "experiments"),
+        ("/graphql", "GetMetricHistoryBulkInterval", "experiments"),
+        ("/graphql", "MlflowGetMetricHistoryBulkIntervalQuery", "experiments"),
+        ("/graphql", "SearchModelVersions", "registered_models"),
+        ("/mlflow/graphql", "MlflowSearchModelVersionsQuery", "registered_models"),
+        ("/graphql", "GetModelVersion", "registered_models"),
+        ("/graphql", "MlflowGetModelVersionQuery", "registered_models"),
+        ("/workspaces/example/graphql", "GetRegisteredModel", "registered_models"),
+        (
+            "/mlflow/workspaces/example/graphql",
+            "MlflowGetRegisteredModelQuery",
+            "registered_models",
+        ),
+        ("/graphql", "SearchRegisteredModels", "registered_models"),
+        ("/graphql", "MlflowSearchRegisteredModelsQuery", "registered_models"),
+    ],
+)
+def test_resolve_rbac_resource_type_graphql_model_registry(path, operation, expected):
+    with app.test_request_context(path, method="POST", json={"operationName": operation}):
+        assert _resolve_rbac_resource_type() == expected
 
 
 def test_all_model_registry_endpoints_available():

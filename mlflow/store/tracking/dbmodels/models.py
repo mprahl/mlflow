@@ -94,7 +94,8 @@ class SqlExperiment(Base):
     """
     Experiment ID: `Integer`. *Primary Key* for ``experiment`` table.
     """
-    name = Column(String(256), unique=True, nullable=False)
+    name = Column(String(256), nullable=False)
+    workspace = Column(String(63), nullable=False)
     """
     Experiment name: `String` (limit 256 characters). Defined as *Unique* and *Non null* in
                      table schema.
@@ -124,6 +125,7 @@ class SqlExperiment(Base):
             name="experiments_lifecycle_stage",
         ),
         PrimaryKeyConstraint("experiment_id", name="experiment_pk"),
+        UniqueConstraint("workspace", "name", name="uq_experiments_workspace_name"),
     )
 
     def __repr__(self):
@@ -144,6 +146,7 @@ class SqlExperiment(Base):
             tags=[t.to_mlflow_entity() for t in self.tags],
             creation_time=self.creation_time,
             last_update_time=self.last_update_time,
+            workspace=self.workspace,
         )
 
 
@@ -1301,6 +1304,15 @@ class SqlEvaluationDataset(Base):
     *Primary Key* for ``evaluation_datasets`` table.
     """
 
+    workspace = Column(
+        String(63),
+        nullable=False,
+        server_default=sa.text("'default'"),
+    )
+    """
+    Workspace name that scopes this dataset.
+    """
+
     name = Column(String(255), nullable=False)
     """
     Dataset name: `String` (limit 255 characters). *Non null* in table schema.
@@ -1355,6 +1367,7 @@ class SqlEvaluationDataset(Base):
         PrimaryKeyConstraint("dataset_id", name="evaluation_datasets_pk"),
         Index("index_evaluation_datasets_name", "name"),
         Index("index_evaluation_datasets_created_time", "created_time"),
+        Index("idx_evaluation_datasets_workspace", "workspace"),
     )
 
     def to_mlflow_entity(self):
@@ -1388,6 +1401,7 @@ class SqlEvaluationDataset(Base):
             last_update_time=self.last_update_time,
             created_by=self.created_by,
             last_updated_by=self.last_updated_by,
+            workspace=self.workspace,
             # experiment_ids will be loaded lazily when accessed
         )
 
@@ -1411,6 +1425,7 @@ class SqlEvaluationDataset(Base):
         # SqlEvaluationDatasetTag objects
         return cls(
             dataset_id=dataset.dataset_id,
+            workspace=dataset.workspace,
             name=dataset.name,
             schema=dataset.schema,
             profile=dataset.profile,

@@ -28,6 +28,8 @@ from mlflow.entities import (
 
 if TYPE_CHECKING:
     from mlflow.entities import EvaluationDataset
+from urllib.parse import quote_plus
+
 from mlflow.entities.dataset_input import DatasetInput
 from mlflow.environment_variables import MLFLOW_SUPPRESS_PRINTING_URL_TO_STDOUT
 from mlflow.exceptions import MlflowException
@@ -56,6 +58,7 @@ from mlflow.telemetry.events import (
 )
 from mlflow.telemetry.track import record_usage_event
 from mlflow.tracking._tracking_service import utils
+from mlflow.tracking._workspace.context import get_current_workspace
 from mlflow.tracking.context import registry as context_registry
 from mlflow.tracking.metric_value_conversion_utils import convert_metric_value_to_float_if_possible
 from mlflow.utils import chunk_list
@@ -76,6 +79,7 @@ from mlflow.utils.validation import (
 )
 
 _logger = logging.getLogger(__name__)
+DEFAULT_WORKSPACE_NAME = "default"
 
 
 class TrackingServiceClient:
@@ -94,6 +98,9 @@ class TrackingServiceClient:
         # property method to ensure that the client is serializable, even if the store is not
         # self.store
         self.store
+        self._supports_workspaces = (
+            hasattr(self.store, "supports_workspaces") and self.store.supports_workspaces()
+        )
 
     @property
     def store(self):
@@ -773,7 +780,15 @@ class TrackingServiceClient:
         if is_databricks_uri(self.tracking_uri):
             experiment_url = f"{host_url}/ml/experiments/{experiment_id}"
         else:
-            experiment_url = f"{host_url}/#/experiments/{experiment_id}"
+            experiment_path = f"/experiments/{experiment_id}"
+            if self._supports_workspaces:
+                if resolved_workspace := get_current_workspace():
+                    experiment_path = (
+                        f"/workspaces/{quote_plus(resolved_workspace)}{experiment_path}"
+                    )
+                else:
+                    experiment_path = f"/workspaces/{DEFAULT_WORKSPACE_NAME}{experiment_path}"
+            experiment_url = f"{host_url}/#{experiment_path}"
         run_url = f"{experiment_url}/runs/{run_id}"
 
         sys.stdout.write(f"🏃 View run {run_name} at: {run_url}\n")

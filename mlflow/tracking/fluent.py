@@ -11,7 +11,17 @@ import logging
 import os
 import threading
 from copy import deepcopy
-from typing import TYPE_CHECKING, Any, Generator, Literal, Optional, Union, overload
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Generator,
+    Literal,
+    Optional,
+    TypeVar,
+    Union,
+    overload,
+)
 
 import mlflow
 from mlflow.entities import Dataset as DatasetEntity
@@ -40,18 +50,26 @@ from mlflow.environment_variables import (
     MLFLOW_EXPERIMENT_ID,
     MLFLOW_EXPERIMENT_NAME,
     MLFLOW_RUN_ID,
+    MLFLOW_WORKSPACE,
 )
-from mlflow.exceptions import MlflowException
+from mlflow.exceptions import MlflowException, RestException
+from mlflow.protos import databricks_pb2
 from mlflow.protos.databricks_pb2 import (
+    FEATURE_DISABLED,
     INVALID_PARAMETER_VALUE,
     RESOURCE_DOES_NOT_EXIST,
 )
 from mlflow.store.tracking import SEARCH_MAX_RESULTS_DEFAULT
+from mlflow.store.workspace.abstract_store import Workspace, WorkspaceNameValidator
 from mlflow.telemetry.events import AutologgingEvent
 from mlflow.telemetry.track import _record_event
 from mlflow.tracing.provider import _get_trace_exporter
 from mlflow.tracking._tracking_service.client import TrackingServiceClient
 from mlflow.tracking._tracking_service.utils import _resolve_tracking_uri
+from mlflow.tracking._workspace.context import (
+    clear_workspace,
+    set_current_workspace,
+)
 from mlflow.utils import get_results_from_paginated_fn
 from mlflow.utils.annotations import experimental
 from mlflow.utils.async_logging.run_operations import RunOperations
@@ -100,6 +118,8 @@ if TYPE_CHECKING:
     import plotly
 
 
+T = TypeVar("T")
+
 _active_experiment_id = None
 
 SEARCH_MAX_RESULTS_PANDAS = 100000
@@ -125,6 +145,45 @@ def _reset_last_logged_model_id() -> None:
 
 
 _experiment_lock = threading.Lock()
+_workspace_lock = threading.Lock()
+
+_WORKSPACE_API_BASE_PATH = "/api/2.0/mlflow/workspaces"
+
+
+def _workspace_client_call(func: Callable[[MlflowClient], T]) -> T:
+    client = MlflowClient()
+    try:
+        return func(client)
+    except RestException as exc:
+        if exc.error_code == databricks_pb2.ErrorCode.Name(databricks_pb2.ENDPOINT_NOT_FOUND):
+            raise MlflowException(
+                "The configured tracking server does not expose workspace APIs. "
+                "Ensure multi-tenancy is enabled.",
+                error_code=FEATURE_DISABLED,
+            ) from exc
+        raise
+
+
+def set_workspace(workspace: str | None) -> None:
+    """Set the active workspace for subsequent MLflow operations."""
+
+    if workspace is None:
+        clear_workspace()
+        MLFLOW_WORKSPACE.unset()
+        return
+
+    WorkspaceNameValidator.validate(workspace)
+
+    with _workspace_lock:
+        set_current_workspace(workspace)
+        MLFLOW_WORKSPACE.set(workspace)
+
+
+@experimental()
+def list_workspaces() -> list[Workspace]:
+    """Return the list of workspaces available to the current user."""
+
+    return _workspace_client_call(lambda client: client.list_workspaces())
 
 
 def set_experiment(

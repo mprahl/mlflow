@@ -1,5 +1,6 @@
 from mlflow.entities import Experiment, LifecycleStage
 from mlflow.utils.time import get_current_time_millis
+from mlflow.utils.workspace_utils import DEFAULT_WORKSPACE_NAME
 
 from tests.helper_functions import random_file, random_int
 
@@ -12,6 +13,7 @@ def _check(exp, exp_id, name, location, lifecycle_stage, creation_time, last_upd
     assert exp.lifecycle_stage == lifecycle_stage
     assert exp.creation_time == creation_time
     assert exp.last_update_time == last_update_time
+    assert exp.workspace == DEFAULT_WORKSPACE_NAME
 
 
 def test_creation_and_hydration():
@@ -39,6 +41,7 @@ def test_creation_and_hydration():
         "tags": {},
         "creation_time": creation_time,
         "last_update_time": last_update_time,
+        "workspace": DEFAULT_WORKSPACE_NAME,
     }
     assert dict(exp) == as_dict
     proto = exp.to_proto()
@@ -61,5 +64,6 @@ def test_string_repr():
     assert (
         str(exp)
         == "<Experiment: artifact_location='hi', creation_time=1662004217511, experiment_id=0, "
-        "last_update_time=1662004217511, lifecycle_stage='active', name='myname', tags={}>"
+        "last_update_time=1662004217511, lifecycle_stage='active', name='myname', tags={}, "
+        "workspace='default'>"
     )

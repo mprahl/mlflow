@@ -22,6 +22,7 @@ from mlflow import pyfunc
 from mlflow.cli import cli, doctor, gc, server
 from mlflow.data import numpy_dataset
 from mlflow.entities import ViewType
+from mlflow.environment_variables import MLFLOW_ENABLE_WORKSPACES, MLFLOW_WORKSPACE_URI
 from mlflow.exceptions import MlflowException
 from mlflow.server import handlers
 from mlflow.store.artifact.artifact_repository_registry import get_artifact_repository
@@ -187,6 +188,97 @@ def test_server_mlflow_artifacts_options():
     with mock.patch("mlflow.server._run_server") as run_server_mock:
         CliRunner().invoke(server, ["--artifacts-only"])
         run_server_mock.assert_called_once()
+
+
+def test_server_workspace_uri_sets_env_when_workspaces_enabled(tmp_path):
+    handlers._tracking_store = None
+    handlers._model_registry_store = None
+    workspace_uri = f"sqlite:///{tmp_path / 'workspace.db'}"
+    backend_uri = f"sqlite:///{tmp_path / 'backend.db'}"
+    artifact_root_path = tmp_path / "artifacts"
+    artifact_root_path.mkdir()
+    artifact_root = artifact_root_path.as_uri()
+
+    MLFLOW_WORKSPACE_URI.unset()
+    MLFLOW_ENABLE_WORKSPACES.unset()
+
+    try:
+        with (
+            mock.patch("mlflow.server._run_server") as run_server_mock,
+            mock.patch("mlflow.server.handlers.initialize_backend_stores") as init_backend,
+        ):
+            result = CliRunner().invoke(
+                server,
+                [
+                    "--enable-workspaces",
+                    "--workspace-store-uri",
+                    workspace_uri,
+                    "--backend-store-uri",
+                    backend_uri,
+                    "--registry-store-uri",
+                    backend_uri,
+                    "--default-artifact-root",
+                    artifact_root,
+                ],
+            )
+            assert result.exit_code == 0, result.output
+            run_server_mock.assert_called_once()
+            init_backend.assert_called_once()
+            args, _ = init_backend.call_args
+            assert args[2] == workspace_uri
+            assert os.environ["MLFLOW_WORKSPACE_URI"] == workspace_uri
+            assert MLFLOW_ENABLE_WORKSPACES.get() is True
+    finally:
+        MLFLOW_WORKSPACE_URI.unset()
+        MLFLOW_ENABLE_WORKSPACES.unset()
+
+
+def test_server_workspace_uri_warns_without_enable(tmp_path):
+    handlers._tracking_store = None
+    handlers._model_registry_store = None
+    workspace_uri = f"sqlite:///{tmp_path / 'workspace.db'}"
+    backend_uri = f"sqlite:///{tmp_path / 'backend.db'}"
+    artifact_root_path = tmp_path / "artifacts"
+    artifact_root_path.mkdir()
+    artifact_root = artifact_root_path.as_uri()
+
+    MLFLOW_WORKSPACE_URI.unset()
+    MLFLOW_ENABLE_WORKSPACES.unset()
+
+    try:
+        with (
+            mock.patch("mlflow.server._run_server") as run_server_mock,
+            mock.patch("mlflow.server.handlers.initialize_backend_stores") as init_backend,
+            mock.patch("mlflow.cli._logger.warning") as warn_mock,
+        ):
+            result = CliRunner().invoke(
+                server,
+                [
+                    "--workspace-store-uri",
+                    workspace_uri,
+                    "--backend-store-uri",
+                    backend_uri,
+                    "--registry-store-uri",
+                    backend_uri,
+                    "--default-artifact-root",
+                    artifact_root,
+                    "--no-enable-workspaces",
+                ],
+            )
+            assert result.exit_code == 0, result.output
+            run_server_mock.assert_called_once()
+            init_backend.assert_called_once()
+            warn_mock.assert_called_once()
+            args, _ = init_backend.call_args
+            assert args[2] == workspace_uri
+            warning_msg = warn_mock.call_args[0][0]
+            expect_warning = "--workspace-store-uri was provided but workspaces are not enabled"
+            assert expect_warning in warning_msg
+            assert "MLFLOW_WORKSPACE_URI" not in os.environ
+            assert MLFLOW_ENABLE_WORKSPACES.get() is False
+    finally:
+        MLFLOW_WORKSPACE_URI.unset()
+        MLFLOW_ENABLE_WORKSPACES.unset()
 
 
 @pytest.mark.parametrize("command", [server])

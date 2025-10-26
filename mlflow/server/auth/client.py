@@ -1,4 +1,9 @@
-from mlflow.server.auth.entities import ExperimentPermission, RegisteredModelPermission, User
+from mlflow.server.auth.entities import (
+    ExperimentPermission,
+    RegisteredModelPermission,
+    User,
+    WorkspacePermission,
+)
 from mlflow.server.auth.routes import (
     CREATE_EXPERIMENT_PERMISSION,
     CREATE_REGISTERED_MODEL_PERMISSION,
@@ -9,6 +14,8 @@ from mlflow.server.auth.routes import (
     GET_EXPERIMENT_PERMISSION,
     GET_REGISTERED_MODEL_PERMISSION,
     GET_USER,
+    LIST_USER_WORKSPACE_PERMISSIONS,
+    LIST_WORKSPACE_PERMISSIONS,
     UPDATE_EXPERIMENT_PERMISSION,
     UPDATE_REGISTERED_MODEL_PERMISSION,
     UPDATE_USER_ADMIN,
@@ -535,3 +542,82 @@ class AuthServiceClient:
             "DELETE",
             json={"name": name, "username": username},
         )
+
+    def list_workspace_permissions(self, workspace_name: str):
+        """
+        List the permissions configured for the specified workspace.
+
+        Args:
+            workspace_name: The workspace name.
+
+        Returns:
+            A list of :py:class:`mlflow.server.auth.entities.WorkspacePermission` objects.
+        """
+
+        resp = self._request(
+            LIST_WORKSPACE_PERMISSIONS.replace("<workspace_name>", workspace_name),
+            "GET",
+        )
+        return [WorkspacePermission.from_json(p) for p in resp["permissions"]]
+
+    def set_workspace_permission(
+        self, workspace_name: str, username: str, resource_type: str, permission: str
+    ):
+        """
+        Create or update a workspace-level permission for a user.
+
+        Args:
+            workspace_name: The workspace name.
+            username: The username receiving the permission.
+            resource_type: The resource type (e.g. "experiments", "registered_models", or "*").
+            permission: Permission to grant. Must be one of "READ", "EDIT",
+                "MANAGE", "NO_PERMISSIONS".
+
+        Returns:
+            A :py:class:`mlflow.server.auth.entities.WorkspacePermission` object.
+        """
+
+        resp = self._request(
+            LIST_WORKSPACE_PERMISSIONS.replace("<workspace_name>", workspace_name),
+            "POST",
+            json={
+                "username": username,
+                "resource_type": resource_type,
+                "permission": permission,
+            },
+        )
+        return WorkspacePermission.from_json(resp["permission"])
+
+    def delete_workspace_permission(self, workspace_name: str, username: str, resource_type: str):
+        """
+        Delete a workspace-level permission for a user.
+
+        Args:
+            workspace_name: The workspace name.
+            username: The username whose permission should be removed.
+            resource_type: The resource type to revoke.
+        """
+
+        self._request(
+            LIST_WORKSPACE_PERMISSIONS.replace("<workspace_name>", workspace_name),
+            "DELETE",
+            json={"username": username, "resource_type": resource_type},
+        )
+
+    def list_user_workspace_permissions(self, username: str):
+        """
+        List workspace-level permissions assigned to a user.
+
+        Args:
+            username: The username.
+
+        Returns:
+            A list of :py:class:`mlflow.server.auth.entities.WorkspacePermission` objects.
+        """
+
+        resp = self._request(
+            LIST_USER_WORKSPACE_PERMISSIONS,
+            "GET",
+            params={"username": username},
+        )
+        return [WorkspacePermission.from_json(p) for p in resp["permissions"]]
