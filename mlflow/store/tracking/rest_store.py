@@ -155,6 +155,9 @@ class RestStore(AbstractStore):
         super().__init__()
         self.get_host_creds = get_host_creds
 
+    def supports_workspaces(self) -> bool:
+        return True
+
     @staticmethod
     @functools.lru_cache
     def _get_server_version(host_creds: MlflowHostCreds) -> Version | None:

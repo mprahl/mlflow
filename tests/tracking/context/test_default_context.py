@@ -4,6 +4,7 @@ import pytest
 
 from mlflow.entities import SourceType
 from mlflow.tracking.context.default_context import DefaultRunContext
+from mlflow.utils.credentials import MlflowCreds
 from mlflow.utils.mlflow_tags import MLFLOW_SOURCE_NAME, MLFLOW_SOURCE_TYPE, MLFLOW_USER
 
 MOCK_SCRIPT_NAME = "/path/to/script.py"
@@ -23,7 +24,13 @@ def test_default_run_context_in_context():
 
 def test_default_run_context_tags(patch_script_name):
     mock_user = mock.Mock()
-    with mock.patch("getpass.getuser", return_value=mock_user):
+    mock_creds = MlflowCreds(None, None)
+    with (
+        mock.patch(
+            "mlflow.tracking.context.default_context.read_mlflow_creds", return_value=mock_creds
+        ),
+        mock.patch("getpass.getuser", return_value=mock_user),
+    ):
         assert DefaultRunContext().tags() == {
             MLFLOW_USER: mock_user,
             MLFLOW_SOURCE_NAME: MOCK_SCRIPT_NAME,

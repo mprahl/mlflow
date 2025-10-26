@@ -76,6 +76,7 @@ from mlflow.utils.async_logging.async_logging_queue import (
     ASYNC_LOGGING_STATUS_CHECK_THREAD_PREFIX,
     ASYNC_LOGGING_WORKER_THREAD_PREFIX,
 )
+from mlflow.utils.credentials import MlflowCreds
 from mlflow.utils.time import get_current_time_millis
 
 from tests.tracing.helper import get_traces
@@ -185,6 +186,15 @@ def reset_experiment_id():
 def reload_context_registry():
     """Reload the context registry module to clear caches."""
     reload(mlflow.tracking.context.registry)
+
+
+@pytest.fixture(autouse=True)
+def patch_read_mlflow_creds():
+    with mock.patch(
+        "mlflow.tracking.context.default_context.read_mlflow_creds",
+        return_value=MlflowCreds(None, None),
+    ):
+        yield
 
 
 @pytest.fixture(params=["list", "pandas"])

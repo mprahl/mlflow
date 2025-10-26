@@ -2,6 +2,7 @@ from mlflow.entities.model_registry import RegisteredModelAlias
 from mlflow.entities.model_registry.model_version import ModelVersion
 from mlflow.entities.model_registry.registered_model import RegisteredModel
 from mlflow.entities.model_registry.registered_model_tag import RegisteredModelTag
+from mlflow.utils.workspace_utils import DEFAULT_WORKSPACE_NAME
 
 from tests.helper_functions import random_str
 
@@ -15,6 +16,7 @@ def _check(
     latest_versions,
     tags,
     aliases,
+    workspace=DEFAULT_WORKSPACE_NAME,
 ):
     assert isinstance(registered_model, RegisteredModel)
     assert registered_model.name == name
@@ -25,6 +27,7 @@ def _check(
     assert registered_model.latest_versions == latest_versions
     assert registered_model.tags == tags
     assert registered_model.aliases == aliases
+    assert registered_model.workspace == workspace
 
 
 def test_creation_and_hydration():
@@ -43,6 +46,7 @@ def test_creation_and_hydration():
         "aliases": {},
         "deployment_job_id": None,
         "deployment_job_state": None,
+        "workspace": DEFAULT_WORKSPACE_NAME,
     }
     assert dict(rmd_1) == as_dict
 
@@ -96,6 +100,7 @@ def test_with_latest_model_versions():
         "aliases": {},
         "deployment_job_id": None,
         "deployment_job_state": None,
+        "workspace": DEFAULT_WORKSPACE_NAME,
     }
     rmd_1 = RegisteredModel.from_dictionary(as_dict)
     as_dict["tags"] = {}
@@ -127,6 +132,7 @@ def test_with_tags():
         "aliases": {},
         "deployment_job_id": None,
         "deployment_job_state": None,
+        "workspace": DEFAULT_WORKSPACE_NAME,
     }
     rmd_1 = RegisteredModel.from_dictionary(as_dict)
     as_dict["tags"] = {tag.key: tag.value for tag in (tags or [])}
@@ -153,6 +159,7 @@ def test_with_aliases():
         "aliases": aliases,
         "deployment_job_id": None,
         "deployment_job_state": None,
+        "workspace": DEFAULT_WORKSPACE_NAME,
     }
     rmd_1 = RegisteredModel.from_dictionary(as_dict)
     as_dict["aliases"] = {alias.alias: alias.version for alias in (aliases or [])}
@@ -178,5 +185,5 @@ def test_string_repr():
         str(rmd) == "<RegisteredModel: aliases={}, creation_timestamp=1000, "
         "deployment_job_id=None, deployment_job_state=None, description='something about a model',"
         " last_updated_timestamp=2002, "
-        "latest_versions=['1', '2', '3'], name='myname', tags={}>"
+        "latest_versions=['1', '2', '3'], name='myname', tags={}, workspace='default'>"
     )

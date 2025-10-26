@@ -97,9 +97,12 @@ from mlflow.protos.service_pb2 import TraceTag as ProtoTraceTag
 from mlflow.store.tracking.rest_store import RestStore
 from mlflow.tracing.analysis import TraceFilterCorrelationResult
 from mlflow.tracing.constant import TRACE_SCHEMA_VERSION_KEY
+from mlflow.tracking.context import git_context
+from mlflow.tracking.context import registry as context_registry
 from mlflow.tracking.request_header.default_request_header_provider import (
     DefaultRequestHeaderProvider,
 )
+from mlflow.utils.credentials import MlflowCreds
 from mlflow.utils.mlflow_tags import MLFLOW_ARTIFACT_LOCATION
 from mlflow.utils.proto_json_utils import message_to_json
 from mlflow.utils.rest_utils import (
@@ -243,10 +246,23 @@ def test_requestor():
         "mlflow.tracking.context.default_context._get_source_type",
         return_value=SourceType.LOCAL,
     )
+    # Clear cached git context to avoid values patched in other tests
+    for provider in context_registry._run_context_provider_registry:
+        if isinstance(provider, git_context.GitRunContext):
+            provider._cache = {}
+
     with (
         mock_http_request() as mock_http,
         mock.patch("mlflow.tracking._tracking_service.utils._get_store", return_value=store),
         mock.patch("mlflow.tracking.context.default_context._get_user", return_value=user_name),
+        mock.patch(
+            "mlflow.tracking.context.default_context.read_mlflow_creds",
+            return_value=MlflowCreds(None, None),
+        ),
+        mock.patch(
+            "mlflow.tracking.context.git_context._get_source_version",
+            return_value=None,
+        ),
         mock.patch("time.time", return_value=13579),
         source_name_patch,
         source_type_patch,
