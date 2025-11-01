@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGetDatasetRecords } from '../hooks/useGetDatasetRecords';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import { Empty, TableCell, TableHeader, TableRow, TableSkeletonRows } from '@databricks/design-system';
@@ -66,6 +66,38 @@ export const ExperimentEvaluationDatasetRecordsTable = ({ dataset }: { dataset: 
     fetchNextPage,
   });
 
+  const tableRef = useRef<HTMLDivElement | null>(null);
+  const handleScroll = useCallback(
+    (event: Event) => {
+      if (event.currentTarget instanceof HTMLDivElement) {
+        fetchMoreOnBottomReached(event.currentTarget);
+      }
+    },
+    [fetchMoreOnBottomReached],
+  );
+
+  const setTableRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      if (tableRef.current) {
+        tableRef.current.removeEventListener('scroll', handleScroll);
+      }
+      tableRef.current = element;
+      if (element) {
+        element.addEventListener('scroll', handleScroll);
+      }
+    },
+    [handleScroll],
+  );
+
+  useEffect(
+    () => () => {
+      if (tableRef.current) {
+        tableRef.current.removeEventListener('scroll', handleScroll);
+      }
+    },
+    [handleScroll],
+  );
+
   const table = useReactTable({
     columns,
     data: datasetRecords ?? [],
@@ -111,7 +143,7 @@ export const ExperimentEvaluationDatasetRecordsTable = ({ dataset }: { dataset: 
           ) : undefined
         }
         scrollable
-        onScroll={(e) => fetchMoreOnBottomReached(e.currentTarget as HTMLDivElement)}
+        ref={setTableRef}
       >
         <TableRow isHeader>
           {table.getLeafHeaders().map(

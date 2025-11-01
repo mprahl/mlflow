@@ -31,6 +31,14 @@ const landingRoute = {
   pageId: 'mlflow.experiments.list',
 };
 
+type MlflowRouteDef = {
+  path?: string;
+  element?: React.ReactNode;
+  pageId?: string;
+  children?: MlflowRouteDef[];
+  [key: string]: unknown;
+};
+
 /**
  * This is root element for MLflow routes, containing app header.
  */
@@ -43,7 +51,7 @@ const MlflowRootRoute = ({
   isDarkTheme?: boolean;
   setIsDarkTheme?: (isDarkTheme: boolean) => void;
   useChildRoutesOutlet?: boolean;
-  routes?: any[];
+  routes?: MlflowRouteDef[];
 }) => {
   useInitializeExperimentRunColors();
 
@@ -93,7 +101,7 @@ const MlflowRootRoute = ({
               ) : (
                 <Routes>
                   {routes?.map(({ element, pageId, path }) => (
-                    <Route key={pageId} path={path} element={element} />
+                    <Route key={`${path}-${pageId}`} path={path} element={element} />
                   ))}
                 </Routes>
               )}
@@ -112,7 +120,7 @@ export const MlflowRouter = ({
   setIsDarkTheme?: (isDarkTheme: boolean) => void;
 }) => {
   // eslint-disable-next-line react-hooks/rules-of-hooks
-  const routes = useMemo(
+  const routes = useMemo<MlflowRouteDef[]>(
     () => [...getExperimentTrackingRouteDefs(), ...getModelRegistryRouteDefs(), landingRoute, ...getCommonRouteDefs()],
     [],
   );

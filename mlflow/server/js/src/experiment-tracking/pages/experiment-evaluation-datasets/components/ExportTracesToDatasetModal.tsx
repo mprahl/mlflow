@@ -16,7 +16,7 @@ import { FormattedMessage } from 'react-intl';
 import { useInfiniteScrollFetch } from '../hooks/useInfiniteScrollFetch';
 import { useSearchEvaluationDatasets } from '../hooks/useSearchEvaluationDatasets';
 import { EvaluationDataset } from '../types';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { getModelTraceId, ModelTrace } from '@mlflow/mlflow/src/shared/web-shared/model-trace-explorer';
 import { compact } from 'lodash';
 import { extractDatasetInfoFromTraces } from '../utils/datasetUtils';
@@ -70,6 +70,38 @@ export const ExportTracesToDatasetModal = ({
     hasNextPage: hasNextPage ?? false,
     fetchNextPage,
   });
+
+  const tableRef = useRef<HTMLDivElement | null>(null);
+  const handleScroll = useCallback(
+    (event: Event) => {
+      if (event.currentTarget instanceof HTMLDivElement) {
+        fetchMoreOnBottomReached(event.currentTarget);
+      }
+    },
+    [fetchMoreOnBottomReached],
+  );
+
+  const setTableRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      if (tableRef.current) {
+        tableRef.current.removeEventListener('scroll', handleScroll);
+      }
+      tableRef.current = element;
+      if (element) {
+        element.addEventListener('scroll', handleScroll);
+      }
+    },
+    [handleScroll],
+  );
+
+  useEffect(
+    () => () => {
+      if (tableRef.current) {
+        tableRef.current.removeEventListener('scroll', handleScroll);
+      }
+    },
+    [handleScroll],
+  );
 
   const table = useReactTable({
     columns,
@@ -141,7 +173,7 @@ export const ExportTracesToDatasetModal = ({
         </div>
         <Table
           scrollable
-          onScroll={(e) => fetchMoreOnBottomReached(e.currentTarget as HTMLDivElement)}
+          ref={setTableRef}
           someRowsSelected={table.getIsSomeRowsSelected() || table.getIsAllRowsSelected()}
           empty={
             !isLoadingDatasets &&

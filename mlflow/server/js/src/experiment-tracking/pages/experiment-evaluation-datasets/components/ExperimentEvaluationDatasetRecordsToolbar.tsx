@@ -2,14 +2,29 @@ import {
   Button,
   ColumnsIcon,
   DropdownMenu,
-  RowsIcon,
+  Icon,
+  type IconProps,
   Typography,
   useDesignSystemTheme,
 } from '@databricks/design-system';
+import type { SVGProps } from 'react';
 import { ColumnDef } from '@tanstack/react-table';
 import { FormattedMessage } from 'react-intl';
 import { EvaluationDataset, EvaluationDatasetRecord } from '../types';
 import { parseJSONSafe } from '@mlflow/mlflow/src/common/utils/TagUtils';
+
+const RowHeightSvg = (props: SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" viewBox="0 0 16 16" {...props}>
+    <path
+      fill="currentColor"
+      fillRule="evenodd"
+      d="M14.25 1a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75H1.75a.75.75 0 0 1-.75-.75V1.75A.75.75 0 0 1 1.75 1zM2.5 2.5h11V5h-11zm0 4v3h11v-3zm11 4.5h-11v2.5h11z"
+      clipRule="evenodd"
+    />
+  </svg>
+);
+
+const RowHeightIcon = (props: IconProps) => <Icon {...props} component={RowHeightSvg} />;
 
 const getTotalRecordsCount = (profile: string | undefined): number | undefined => {
   if (!profile) {
@@ -74,7 +89,7 @@ export const ExperimentEvaluationDatasetRecordsToolbar = ({
       <div css={{ display: 'flex', alignItems: 'flex-start' }}>
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
-            <Button componentId="mlflow.eval-datasets.records-toolbar.row-size-toggle" icon={<RowsIcon />} />
+            <Button componentId="mlflow.eval-datasets.records-toolbar.row-size-toggle" icon={<RowHeightIcon />} />
           </DropdownMenu.Trigger>
           <DropdownMenu.Content align="end">
             <DropdownMenu.RadioGroup

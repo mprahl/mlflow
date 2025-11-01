@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Empty,
   Table,
@@ -192,6 +192,38 @@ export const ExperimentEvaluationDatasetsListTable = ({
     fetchNextPage,
   });
 
+  const tableRef = useRef<HTMLDivElement | null>(null);
+  const handleScroll = useCallback(
+    (event: Event) => {
+      if (event.currentTarget instanceof HTMLDivElement) {
+        fetchMoreOnBottomReached(event.currentTarget);
+      }
+    },
+    [fetchMoreOnBottomReached],
+  );
+
+  const setTableRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      if (tableRef.current) {
+        tableRef.current.removeEventListener('scroll', handleScroll);
+      }
+      tableRef.current = element;
+      if (element) {
+        element.addEventListener('scroll', handleScroll);
+      }
+    },
+    [handleScroll],
+  );
+
+  useEffect(
+    () => () => {
+      if (tableRef.current) {
+        tableRef.current.removeEventListener('scroll', handleScroll);
+      }
+    },
+    [handleScroll],
+  );
+
   // update loading state in parent
   useEffect(() => {
     setIsLoading(isLoading);
@@ -286,8 +318,8 @@ export const ExperimentEvaluationDatasetsListTable = ({
               />
             ) : undefined
           }
-          onScroll={(e) => fetchMoreOnBottomReached(e.currentTarget as HTMLDivElement)}
           scrollable
+          ref={setTableRef}
         >
           <TableRow isHeader>
             {table.getLeafHeaders().map((header) => (
