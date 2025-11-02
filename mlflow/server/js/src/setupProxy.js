@@ -23,6 +23,12 @@ module.exports = function (app) {
     }),
   );
   app.use(
+    createProxyMiddleware('/workspaces', {
+      target: proxyTarget,
+      changeOrigin: true,
+    }),
+  );
+  app.use(
     createProxyMiddleware('/get-artifact', {
       target: proxyStaticTarget,
       ws: true,

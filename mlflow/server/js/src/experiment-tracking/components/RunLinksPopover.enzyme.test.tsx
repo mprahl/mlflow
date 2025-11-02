@@ -8,6 +8,7 @@
 import { describe, beforeEach, jest, test, expect } from '@jest/globals';
 import React from 'react';
 import { MemoryRouter } from '../../common/utils/RoutingUtils';
+import { prefixRouteWithWorkspace } from '../../common/utils/WorkspaceUtils';
 import { shallow, mount } from 'enzyme';
 
 import { RunLinksPopover } from './RunLinksPopover';
@@ -69,7 +70,7 @@ describe('unit tests', () => {
     props.runItems.forEach(({ runId, name, color, y }: any, index: any) => {
       const link = links[index];
       const hrefExpected = Routes.getRunPageRoute(props.experimentId, runId);
-      expect(link.getAttribute('href')).toBe(hrefExpected);
+      expect(link.getAttribute('href')).toBe(prefixRouteWithWorkspace(hrefExpected));
 
       const p = link.querySelector('p');
       // @ts-expect-error TS(2531): Object is possibly 'null'.

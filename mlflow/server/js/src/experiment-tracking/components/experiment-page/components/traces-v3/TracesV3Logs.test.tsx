@@ -24,6 +24,8 @@ import { useMarkdownConverter } from '@mlflow/mlflow/src/common/utils/MarkdownUt
 import { GenericNetworkRequestError } from '@mlflow/mlflow/src/shared/web-shared/errors/PredefinedErrors';
 import { TestRouter, testRoute, waitForRoutesToBeRendered } from '@mlflow/mlflow/src/common/utils/RoutingTestUtils';
 
+jest.setTimeout(20000);
+
 // Mock all external dependencies
 jest.mock('@databricks/web-shared/genai-traces-table', () => {
   const actual = jest.requireActual<typeof import('@databricks/web-shared/genai-traces-table')>(

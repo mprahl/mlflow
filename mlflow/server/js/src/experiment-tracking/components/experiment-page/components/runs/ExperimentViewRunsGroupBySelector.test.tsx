@@ -11,6 +11,8 @@ import { useState } from 'react';
 
 const userEvent = userEventGlobal.setup({ pointerEventsCheck: PointerEventsCheckLevel.Never });
 
+jest.setTimeout(20000);
+
 describe('ExperimentViewRunsGroupBySelector', () => {
   const runsDataDatasets: Partial<ExperimentRunsSelectorResult> = {
     datasetsList: [

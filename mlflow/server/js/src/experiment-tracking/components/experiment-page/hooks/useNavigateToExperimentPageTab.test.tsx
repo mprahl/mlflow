@@ -21,6 +21,17 @@ describe('useNavigateToExperimentPageTab', () => {
 
   const { history } = setupTestRouter();
 
+  const withWorkspaceRoute = (path: string) => {
+    const normalized = path.startsWith('/') ? path : `/${path}`;
+    if (normalized === '/') {
+      return '/workspaces/:workspaceName';
+    }
+    if (normalized === '/*') {
+      return '/workspaces/:workspaceName/*';
+    }
+    return `/workspaces/:workspaceName${normalized}`;
+  };
+
   const mockResponseWithExperimentKind = (experimentKind: ExperimentKind) => {
     server.use(
       graphql.query<MlflowGetExperimentQuery>('MlflowGetExperimentQuery', (req, res, ctx) => {
@@ -68,6 +79,11 @@ describe('useNavigateToExperimentPageTab', () => {
         routes={[
           testRoute(<TestExperimentPage />, createMLflowRoutePath('/experiments/:experimentId')),
           testRoute(<TestExperimentTabsPage />, createMLflowRoutePath('/experiments/:experimentId/:tabName')),
+          testRoute(<TestExperimentPage />, withWorkspaceRoute('/experiments/:experimentId')),
+          testRoute(
+            <TestExperimentTabsPage />,
+            withWorkspaceRoute('/experiments/:experimentId/:tabName'),
+          ),
         ]}
         initialEntries={[initialRoute]}
       />,

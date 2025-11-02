@@ -1,6 +1,7 @@
 import { jest, describe, beforeEach, afterEach, test, expect } from '@jest/globals';
 import { Provider } from 'react-redux';
 import { useLocation, createMLflowRoutePath } from '../../common/utils/RoutingUtils';
+import { prefixRouteWithWorkspace } from '../../common/utils/WorkspaceUtils';
 import { testRoute, TestRouter } from '../../common/utils/RoutingTestUtils';
 import configureStore from 'redux-mock-store';
 import { ErrorWrapper } from '../../common/utils/ErrorWrapper';
@@ -20,6 +21,17 @@ jest.mock('../actions', () => ({
 describe('DirectRunPage', () => {
   let mockLocation: any;
   let mockStore: any;
+
+  const withWorkspaceRoute = (path: string) => {
+    const normalized = path.startsWith('/') ? path : `/${path}`;
+    if (normalized === '/') {
+      return '/workspaces/:workspaceName';
+    }
+    if (normalized === '/*') {
+      return '/workspaces/:workspaceName/*';
+    }
+    return `/workspaces/:workspaceName${normalized}`;
+  };
 
   const mountComponent = async (runInfosByUuid = {}, runUuid = '') => {
     mockStore = configureStore([])({
@@ -50,9 +62,22 @@ describe('DirectRunPage', () => {
             testRoute(
               <>
                 <TestComponent />
+              </>,
+              withWorkspaceRoute('/experiments/:experimentId/runs/:runId'),
+            ),
+            testRoute(
+              <>
+                <TestComponent />
                 <DirectRunPage />
               </>,
               createMLflowRoutePath('/:runUuid'),
+            ),
+            testRoute(
+              <>
+                <TestComponent />
+                <DirectRunPage />
+              </>,
+              withWorkspaceRoute('/:runUuid'),
             ),
           ]}
         />
@@ -80,7 +105,9 @@ describe('DirectRunPage', () => {
       '321-run-id',
     );
 
-    expect(mockLocation.pathname).toBe(createMLflowRoutePath('/experiments/123-exp-id/runs/321-run-id'));
+    expect(mockLocation.pathname).toBe(
+      prefixRouteWithWorkspace(createMLflowRoutePath('/experiments/123-exp-id/runs/321-run-id')),
+    );
   });
 
   test('properly dispatches redux actions for fetching the run', async () => {

@@ -14,6 +14,7 @@ import { first, orderBy } from 'lodash';
 import type { RunsChartsBarCardConfig } from '../../components/runs-charts/runs-charts.types';
 import type { RunsChartsRunData } from '../../components/runs-charts/components/RunsCharts.common';
 import { createMLflowRoutePath } from '../../../common/utils/RoutingUtils';
+import { prefixRouteWithWorkspace } from '../../../common/utils/WorkspaceUtils';
 import { QueryClient, QueryClientProvider } from '@mlflow/mlflow/src/common/utils/reactQueryHooks';
 
 // eslint-disable-next-line no-restricted-syntax -- TODO(FEINF-4392)
@@ -48,6 +49,17 @@ jest.mock('../../components/runs-charts/components/RunsChartsDraggableCard', () 
 
 describe('ExperimentLoggedModelListPage', () => {
   const { history } = setupTestRouter();
+
+  const withWorkspaceRoute = (path: string) => {
+    const normalized = path.startsWith('/') ? path : `/${path}`;
+    if (normalized === '/') {
+      return '/workspaces/:workspaceName';
+    }
+    if (normalized === '/*') {
+      return '/workspaces/:workspaceName/*';
+    }
+    return `/workspaces/:workspaceName${normalized}`;
+  };
 
   // Simulate API returning logged models in particular order, configured by "ascending" flag
   const createTestLoggedModelsResponse = (
@@ -166,7 +178,10 @@ describe('ExperimentLoggedModelListPage', () => {
             <IntlProvider locale="en">
               <DesignSystemProvider>
                 <TestRouter
-                  routes={[testRoute(<ExperimentLoggedModelListPage />, '/experiments/:experimentId')]}
+                  routes={[
+                    testRoute(<ExperimentLoggedModelListPage />, '/experiments/:experimentId'),
+                    testRoute(<ExperimentLoggedModelListPage />, withWorkspaceRoute('/experiments/:experimentId')),
+                  ]}
                   history={history}
                   initialEntries={['/experiments/test-experiment']}
                 />
@@ -243,7 +258,7 @@ describe('ExperimentLoggedModelListPage', () => {
     // The link should point to the run page
     expect(first(screen.getAllByRole('link', { name: 'Test run name' }))).toHaveAttribute(
       'href',
-      createMLflowRoutePath('/experiments/test-experiment/runs/test-run'),
+      prefixRouteWithWorkspace(createMLflowRoutePath('/experiments/test-experiment/runs/test-run')),
     );
   });
 
@@ -258,7 +273,7 @@ describe('ExperimentLoggedModelListPage', () => {
     // Expect model 6 to have a link to the registered model version
     expect(screen.getByRole('link', { name: /registered-model-name-6 v1/ })).toHaveAttribute(
       'href',
-      createMLflowRoutePath('/models/registered-model-name-6/versions/1'),
+      prefixRouteWithWorkspace(createMLflowRoutePath('/models/registered-model-name-6/versions/1')),
     );
 
     // Expect model 5 to not have any registered model version links

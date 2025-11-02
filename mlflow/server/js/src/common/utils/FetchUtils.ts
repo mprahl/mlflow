@@ -11,6 +11,7 @@ import yaml from 'js-yaml';
 import { pickBy } from 'lodash';
 import { ErrorWrapper } from './ErrorWrapper';
 import { matchPredefinedError } from '@databricks/web-shared/errors';
+import { getActiveWorkspace, buildWorkspacePath } from './WorkspaceUtils';
 
 export const HTTPMethods = {
   GET: 'GET',
@@ -52,11 +53,53 @@ export const getDefaultHeaders = (cookieStr: any) => {
   };
 };
 
-export const getAjaxUrl = (relativeUrl: any) => {
-  if (process.env['MLFLOW_USE_ABSOLUTE_AJAX_URLS'] === 'true' && !relativeUrl.startsWith('/')) {
-    return '/' + relativeUrl;
+const prefixWithWorkspace = (relativeUrl: string) => {
+  const workspace = getActiveWorkspace();
+  if (!workspace || typeof relativeUrl !== 'string' || relativeUrl.length === 0) {
+    return relativeUrl;
   }
-  return relativeUrl;
+
+  const needsLeadingSlash = relativeUrl.startsWith('/');
+  const normalized = needsLeadingSlash ? relativeUrl.slice(1) : relativeUrl;
+  const segments = normalized.split('/');
+  const mlflowIndex = segments.findIndex((segment) => segment === 'mlflow');
+
+  if (mlflowIndex === -1) {
+    if (segments[0] === 'workspaces') {
+      return relativeUrl;
+    }
+
+    if (segments[0] === 'graphql') {
+      const workspaceSegments = buildWorkspacePath(workspace).split('/');
+      const prefixedSegments = [...workspaceSegments, ...segments];
+      const prefixed = prefixedSegments.join('/');
+      return needsLeadingSlash ? `/${prefixed}` : prefixed;
+    }
+
+    return relativeUrl;
+  }
+
+  if (segments[mlflowIndex + 1] === 'workspaces') {
+    return relativeUrl;
+  }
+
+  const workspaceSegments = buildWorkspacePath(workspace).split('/');
+  segments.splice(mlflowIndex + 1, 0, ...workspaceSegments);
+
+  const prefixed = segments.join('/');
+  return needsLeadingSlash ? `/${prefixed}` : prefixed;
+};
+
+export const getAjaxUrl = (relativeUrl: any) => {
+  const urlWithWorkspace = typeof relativeUrl === 'string' ? prefixWithWorkspace(relativeUrl) : relativeUrl;
+  if (
+    process.env['MLFLOW_USE_ABSOLUTE_AJAX_URLS'] === 'true' &&
+    typeof urlWithWorkspace === 'string' &&
+    !urlWithWorkspace.startsWith('/')
+  ) {
+    return '/' + urlWithWorkspace;
+  }
+  return urlWithWorkspace;
 };
 
 // return response json by default, if response is not parsable to json,

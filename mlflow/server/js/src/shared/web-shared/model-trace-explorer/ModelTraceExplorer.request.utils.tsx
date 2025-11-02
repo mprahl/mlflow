@@ -1,3 +1,4 @@
+import { getAjaxUrl as getWorkspaceAwareAjaxUrl } from '@mlflow/mlflow/src/common/utils/FetchUtils';
 import { matchPredefinedError } from '@databricks/web-shared/errors';
 
 // eslint-disable-next-line no-restricted-globals -- See go/spog-fetch
@@ -18,6 +19,7 @@ export const fetchAPI = async (
   body?: any,
   signal?: AbortSignal,
 ) => {
+  const resolvedUrl = getWorkspaceAwareAjaxUrl(url);
   const options: RequestInit = {
     method,
     signal,
@@ -30,7 +32,7 @@ export const fetchAPI = async (
   if (body) {
     options.body = serializeRequestBody(body);
   }
-  const response = await fetchFn(url, options);
+  const response = await fetchFn(resolvedUrl, options);
 
   if (!response.ok) {
     const predefinedError = matchPredefinedError(response);
@@ -48,12 +50,7 @@ export const fetchAPI = async (
   return response.json();
 };
 
-export const getAjaxUrl = (relativeUrl: any) => {
-  if (process.env['MLFLOW_USE_ABSOLUTE_AJAX_URLS'] === 'true' && !relativeUrl.startsWith('/')) {
-    return '/' + relativeUrl;
-  }
-  return relativeUrl;
-};
+export const getAjaxUrl = (relativeUrl: string) => getWorkspaceAwareAjaxUrl(relativeUrl);
 
 // Parse cookies from document.cookie
 function parseCookies(cookieString = document.cookie) {

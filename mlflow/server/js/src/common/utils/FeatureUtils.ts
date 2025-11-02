@@ -3,6 +3,10 @@
  * In the OSS version, you can override them in local development by manually changing the return values.
  */
 
+export const shouldEnableWorkspaces = () => true;
+
+export const shouldEnableWorkspacePermissions = () => shouldEnableWorkspaces();
+
 export const shouldEnableRunDetailsPageAutoRefresh = () => true;
 
 /**

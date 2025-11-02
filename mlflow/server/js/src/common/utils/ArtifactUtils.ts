@@ -6,7 +6,9 @@
  */
 
 import { ErrorWrapper } from './ErrorWrapper';
-import { getDefaultHeaders, HTTPMethods } from './FetchUtils';
+import { getAjaxUrl, getDefaultHeaders, HTTPMethods } from './FetchUtils';
+import { shouldEnableWorkspaces } from './FeatureUtils';
+import { getCurrentWorkspace } from './WorkspaceUtils';
 
 /**
  * Async function to fetch and return the specified artifact blob from response.
@@ -114,12 +116,25 @@ export function getArtifactBytesContent(artifactLocation: any) {
 }
 
 export const getLoggedModelArtifactLocationUrl = (path: string, loggedModelId: string) => {
-  return `ajax-api/2.0/mlflow/logged-models/${loggedModelId}/artifacts/files?artifact_file_path=${encodeURIComponent(
-    path,
-  )}`;
+  const baseUrl = getAjaxUrl(`ajax-api/2.0/mlflow/logged-models/${loggedModelId}/artifacts/files`);
+  if (typeof baseUrl !== 'string') {
+    return baseUrl;
+  }
+  const separator = baseUrl.includes('?') ? '&' : '?';
+  return `${baseUrl}${separator}artifact_file_path=${encodeURIComponent(path)}`;
 };
 
 export const getArtifactLocationUrl = (path: string, runUuid: string) => {
   const artifactEndpointPath = 'get-artifact';
-  return `${artifactEndpointPath}?path=${encodeURIComponent(path)}&run_uuid=${encodeURIComponent(runUuid)}`;
+  const queryString = `path=${encodeURIComponent(path)}&run_uuid=${encodeURIComponent(runUuid)}`;
+
+  // Prefix with workspace when workspaces are enabled
+  if (shouldEnableWorkspaces()) {
+    const workspace = getCurrentWorkspace();
+    if (workspace) {
+      return `workspaces/${encodeURIComponent(workspace)}/${artifactEndpointPath}?${queryString}`;
+    }
+  }
+
+  return `${artifactEndpointPath}?${queryString}`;
 };

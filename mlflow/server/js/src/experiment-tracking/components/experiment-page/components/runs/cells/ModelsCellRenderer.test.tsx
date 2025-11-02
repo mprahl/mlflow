@@ -12,6 +12,9 @@ import { shouldUseGetLoggedModelsBatchAPI } from '../../../../../../common/utils
 import { DesignSystemProvider } from '@databricks/design-system';
 
 jest.mock('../../../../../../common/utils/FeatureUtils', () => ({
+  ...jest.requireActual<typeof import('../../../../../../common/utils/FeatureUtils')>(
+    '../../../../../../common/utils/FeatureUtils',
+  ),
   shouldUnifyLoggedModelsAndRegisteredModels: jest.fn(),
   shouldUseGetLoggedModelsBatchAPI: jest.fn(),
 }));

@@ -8,8 +8,12 @@ import { ExperimentKind, ExperimentPageTabName } from '@mlflow/mlflow/src/experi
 import { EXPERIMENT_KIND_TAG_KEY } from '../../utils/ExperimentKindUtils';
 import { TestRouter, testRoute, waitForRoutesToBeRendered } from '@mlflow/mlflow/src/common/utils/RoutingTestUtils';
 import Routes from '../../routes';
+import { prefixRouteWithWorkspace } from '../../../common/utils/WorkspaceUtils';
 
 jest.mock('../../../common/utils/FeatureUtils', () => ({
+  ...jest.requireActual<typeof import('../../../common/utils/FeatureUtils')>(
+    '../../../common/utils/FeatureUtils',
+  ),
   shouldEnableExperimentPageHeaderV2: () => true,
   shouldUseRenamedUnifiedTracesTab: () => false,
   shouldDisableReproduceRunButton: () => false,
@@ -91,7 +95,7 @@ describe('RunViewHeader - integration test', () => {
     const experimentLink = screen.getByTestId('experiment-observatory-link-runs');
     expect(experimentLink.textContent).toBe('Evaluations');
     const expectedPath = Routes.getExperimentPageTabRoute(testExperimentId, ExperimentPageTabName.EvaluationRuns);
-    expect(experimentLink.getAttribute('href')).toBe(expectedPath);
+    expect(experimentLink.getAttribute('href')).toBe(prefixRouteWithWorkspace(expectedPath));
   });
 
   it('routes to runs tab when experiment is GenAI but has model outputs', async () => {
@@ -115,7 +119,7 @@ describe('RunViewHeader - integration test', () => {
     const experimentLink = screen.getByTestId('experiment-observatory-link-runs');
     expect(experimentLink.textContent).toBe('Runs');
     const expectedPath = Routes.getExperimentPageTabRoute(testExperimentId, ExperimentPageTabName.Runs);
-    expect(experimentLink.getAttribute('href')).toBe(expectedPath);
+    expect(experimentLink.getAttribute('href')).toBe(prefixRouteWithWorkspace(expectedPath));
   });
 
   it('routes to runs tab when experiment is not GenAI', async () => {
@@ -134,6 +138,6 @@ describe('RunViewHeader - integration test', () => {
     const experimentLink = screen.getByTestId('experiment-observatory-link-runs');
     expect(experimentLink.textContent).toBe('Runs');
     const expectedPath = Routes.getExperimentPageTabRoute(testExperimentId, ExperimentPageTabName.Runs);
-    expect(experimentLink.getAttribute('href')).toBe(expectedPath);
+    expect(experimentLink.getAttribute('href')).toBe(prefixRouteWithWorkspace(expectedPath));
   });
 });

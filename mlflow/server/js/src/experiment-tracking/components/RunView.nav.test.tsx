@@ -33,6 +33,17 @@ jest.mock('./run-page/hooks/useRunDetailsPageData', () => ({
 }));
 
 describe('RunView navigation integration test', () => {
+  const withWorkspaceRoute = (path: string) => {
+    const normalized = path.startsWith('/') ? path : `/${path}`;
+    if (normalized === '/') {
+      return '/workspaces/:workspaceName';
+    }
+    if (normalized === '/*') {
+      return '/workspaces/:workspaceName/*';
+    }
+    return `/workspaces/:workspaceName${normalized}`;
+  };
+
   const renderComponent = (initialRoute = '/experiments/123456789/runs/experiment123456789_run1') => {
     const mockStore = configureStore([thunk, promiseMiddleware()]);
     const mockState = {
@@ -49,7 +60,10 @@ describe('RunView navigation integration test', () => {
           <DesignSystemProvider>
             <TestRouter
               initialEntries={[createMLflowRoutePath(initialRoute)]}
-              routes={[testRoute(<RunPage />, RoutePaths.runPageWithTab)]}
+              routes={[
+                testRoute(<RunPage />, RoutePaths.runPageWithTab),
+                testRoute(<RunPage />, withWorkspaceRoute(RoutePaths.runPageWithTab)),
+              ]}
             />
           </DesignSystemProvider>
         </QueryClientProvider>

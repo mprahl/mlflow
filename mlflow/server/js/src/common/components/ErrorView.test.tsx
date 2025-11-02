@@ -3,6 +3,7 @@ import React from 'react';
 import { ErrorView } from './ErrorView';
 import { renderWithIntl, screen } from '@mlflow/mlflow/src/common/utils/TestUtils.react18';
 import { MemoryRouter } from '../utils/RoutingUtils';
+import { prefixRouteWithWorkspace } from '../utils/WorkspaceUtils';
 
 describe('ErrorView', () => {
   test('should render 400', () => {
@@ -26,7 +27,7 @@ describe('ErrorView', () => {
 
     const link = screen.getByRole('link');
     expect(link).toBeInTheDocument();
-    expect(link).toHaveAttribute('href', '/path/to');
+    expect(link).toHaveAttribute('href', prefixRouteWithWorkspace('/path/to'));
   });
 
   it('should render 404', () => {
@@ -50,7 +51,7 @@ describe('ErrorView', () => {
 
     const link = screen.getByRole('link');
     expect(link).toBeInTheDocument();
-    expect(link).toHaveAttribute('href', '/path/to');
+    expect(link).toHaveAttribute('href', prefixRouteWithWorkspace('/path/to'));
   });
 
   test('should render 404 with sub message', () => {
@@ -74,6 +75,6 @@ describe('ErrorView', () => {
 
     const link = screen.getByRole('link');
     expect(link).toBeInTheDocument();
-    expect(link).toHaveAttribute('href', '/path/to');
+    expect(link).toHaveAttribute('href', prefixRouteWithWorkspace('/path/to'));
   });
 });

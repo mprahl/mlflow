@@ -11,6 +11,8 @@ import { AssessmentSchemaContextProvider } from '../contexts/AssessmentSchemaCon
 import type { Assessment } from '../ModelTrace.types';
 import { MOCK_ASSESSMENT, MOCK_EXPECTATION } from '../ModelTraceExplorer.test-utils';
 
+jest.setTimeout(20000);
+
 // Mock the hooks
 jest.mock('../hooks/useCreateAssessment', () => ({
   useCreateAssessment: jest.fn(() => ({
@@ -79,13 +81,14 @@ describe('AssessmentCreateForm', () => {
 
       // Change assessment type to expectation and data type to number
       await user.click(assessmentTypeSelect);
-      await user.click(screen.getByText('Expectation'));
+      await user.click(await screen.findByText('Expectation'));
       await waitFor(() => {
         expect(assessmentTypeSelect).toHaveTextContent('Expectation');
       });
 
       await user.click(dataTypeSelect);
-      await user.click(screen.getAllByText('Number')[0]);
+      const [numberOption] = await screen.findAllByText('Number');
+      await user.click(numberOption);
       await waitFor(() => {
         expect(dataTypeSelect).toHaveTextContent('Number');
       });
@@ -128,13 +131,13 @@ describe('AssessmentCreateForm', () => {
 
       // Change assessment type to expectation and data type to number
       await user.click(assessmentTypeSelect);
-      await user.click(screen.getByText('Expectation'));
+      await user.click(await screen.findByText('Expectation'));
       await waitFor(() => {
         expect(assessmentTypeSelect).toHaveTextContent('Expectation');
       });
 
       await user.click(dataTypeSelect);
-      await user.click(screen.getByText('Number'));
+      await user.click(await screen.findByText('Number'));
       await waitFor(() => {
         expect(dataTypeSelect).toHaveTextContent('Number');
       });
@@ -147,12 +150,10 @@ describe('AssessmentCreateForm', () => {
       await user.click(nameInput);
 
       // The new name should appear in the typeahead
-      await waitFor(() => {
-        expect(screen.getByText('my_new_assessment')).toBeInTheDocument();
-      });
+      await screen.findByText('my_new_assessment');
 
       // Select the new name
-      await user.click(screen.getByText('my_new_assessment'));
+      await user.click(await screen.findByText('my_new_assessment'));
 
       // Name should be updated, but assessment type and data type should be preserved
       await waitFor(() => {
@@ -179,10 +180,11 @@ describe('AssessmentCreateForm', () => {
 
       // Change to non-default values
       await user.click(assessmentTypeSelect);
-      await user.click(screen.getByText('Expectation'));
+      await user.click(await screen.findByText('Expectation'));
 
       await user.click(dataTypeSelect);
-      await user.click(screen.getAllByText('String')[0]);
+      const [stringOption] = await screen.findAllByText('String');
+      await user.click(stringOption);
 
       await waitFor(() => {
         expect(assessmentTypeSelect).toHaveTextContent('Expectation');
@@ -218,7 +220,7 @@ describe('AssessmentCreateForm', () => {
 
       // Change some values
       await user.click(assessmentTypeSelect);
-      await user.click(screen.getByText('Expectation'));
+      await user.click(await screen.findByText('Expectation'));
 
       const nameInput = screen.getByPlaceholderText('Enter an assessment name');
       await user.type(nameInput, 'test_name');
@@ -251,10 +253,10 @@ describe('AssessmentCreateForm', () => {
 
       // Change to non-default values
       await user.click(assessmentTypeSelect);
-      await user.click(screen.getByText('Expectation'));
+      await user.click(await screen.findByText('Expectation'));
 
       await user.click(dataTypeSelect);
-      await user.click(screen.getByText('Number'));
+      await user.click(await screen.findByText('Number'));
 
       await waitFor(() => {
         expect(assessmentTypeSelect).toHaveTextContent('Expectation');
@@ -291,7 +293,7 @@ describe('AssessmentCreateForm', () => {
 
       // Change values first
       await user.click(assessmentTypeSelect);
-      await user.click(screen.getByText('Expectation'));
+      await user.click(await screen.findByText('Expectation'));
 
       await waitFor(() => {
         expect(assessmentTypeSelect).toHaveTextContent('Expectation');

@@ -67,6 +67,29 @@ describe('ExperimentLoggedModelListPage', () => {
     rest.post('/ajax-api/2.0/mlflow/runs/search', (req, res, ctx) => res(ctx.json({ runs: [] }))),
   );
 
+  const withWorkspaceRoute = (path?: string) => {
+    if (!path) {
+      return path;
+    }
+    const normalized = path.startsWith('/') ? path : `/${path}`;
+    if (normalized === '/') {
+      return '/workspaces/:workspaceName';
+    }
+    if (normalized === '/*') {
+      return '/workspaces/:workspaceName/*';
+    }
+    return `/workspaces/:workspaceName${normalized}`;
+  };
+
+  const cloneRouteWithWorkspacePath = (route: any) => {
+    const workspacePath = withWorkspaceRoute(route.path);
+    return {
+      ...route,
+      path: workspacePath,
+      children: route.children ? route.children.map(cloneRouteWithWorkspacePath) : undefined,
+    };
+  };
+
   const renderTestComponent = () => {
     const queryClient = new QueryClient();
     return render(
@@ -76,8 +99,8 @@ describe('ExperimentLoggedModelListPage', () => {
             <QueryClientProvider client={queryClient}>
               <DesignSystemProvider>
                 <TestRouter
-                  routes={[
-                    {
+                  routes={(() => {
+                    const baseRoute = {
                       path: RoutePaths.experimentPage,
                       pageId: PageId.experimentPage,
                       element: createLazyRouteElement(() => import('./ExperimentPageTabs')),
@@ -95,8 +118,9 @@ describe('ExperimentLoggedModelListPage', () => {
                           ),
                         },
                       ],
-                    },
-                  ]}
+                    };
+                    return [baseRoute, cloneRouteWithWorkspacePath(baseRoute)];
+                  })()}
                   history={history}
                   initialEntries={[createMLflowRoutePath('/experiments/12345678/models')]}
                 />

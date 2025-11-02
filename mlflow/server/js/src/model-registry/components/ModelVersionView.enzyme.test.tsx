@@ -11,6 +11,7 @@ import { ModelVersionView, ModelVersionViewImpl } from './ModelVersionView';
 import { mockModelVersionDetailed } from '../test-utils';
 import { Stages, ModelVersionStatus, ACTIVE_STAGES } from '../constants';
 import { MemoryRouter } from '../../common/utils/RoutingUtils';
+import { prefixRouteWithWorkspace } from '../../common/utils/WorkspaceUtils';
 import Utils from '../../common/utils/Utils';
 import configureStore from 'redux-mock-store';
 import thunk from 'redux-thunk';
@@ -170,7 +171,7 @@ describe('ModelVersionView', () => {
     };
     wrapper = createComponentInstance(props);
     const linkedRun = wrapper.find('.linked-run').at(0); // TODO: Figure out why it returns 2.
-    expect(linkedRun.html()).toContain(expectedRunLink);
+    expect(linkedRun.html()).toContain(prefixRouteWithWorkspace(expectedRunLink));
     expect(linkedRun.html()).toContain(expectedRunDisplayName);
   });
   test('Page title is set', () => {
