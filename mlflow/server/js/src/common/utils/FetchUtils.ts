@@ -495,12 +495,30 @@ function serializeRequestBody(payload: any | FormData | Blob) {
     : JSON.stringify(payload);
 }
 
-export const fetchAPI = async (url: string, method: 'POST' | 'GET' | 'PATCH' | 'DELETE' = 'GET', body?: any) => {
-  const response = await fetch(url, {
+export const fetchAPI = async (
+  url: string,
+  method: 'POST' | 'GET' | 'PATCH' | 'DELETE' = 'GET',
+  body?: any,
+  signal?: AbortSignal,
+) => {
+  let cookieString = '';
+  if (typeof document !== 'undefined' && typeof document.cookie === 'string') {
+    cookieString = document.cookie || '';
+  }
+  const fetchOptions: RequestInit = {
     method,
-    body: serializeRequestBody(body),
-    headers: body ? { 'Content-Type': 'application/json' } : {},
-  });
+    headers: {
+      ...getDefaultHeaders(cookieString),
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+    },
+    signal,
+  };
+
+  if (body !== undefined) {
+    fetchOptions.body = serializeRequestBody(body);
+  }
+
+  const response = await fetch(url, fetchOptions);
   if (!response.ok) {
     const predefinedError = matchPredefinedError(response);
     if (predefinedError) {
