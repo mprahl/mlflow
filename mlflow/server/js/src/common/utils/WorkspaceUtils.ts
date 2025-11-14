@@ -1,31 +1,30 @@
 import { shouldEnableWorkspaces } from './FeatureUtils';
 
 const WORKSPACE_STORAGE_KEY = 'mlflow.activeWorkspace';
+
+const getStoredWorkspace = () => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  try {
+    return window.localStorage.getItem(WORKSPACE_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+};
+
+let activeWorkspace: string | null = getStoredWorkspace();
+
 const WORKSPACE_PREFIX = '/workspaces/';
+
 export const DEFAULT_WORKSPACE_NAME = 'default';
 
-// Module-level state (simpler than React Context for this use case)
-let activeWorkspace: string | null = null;
-
-// Initialize from localStorage
-if (typeof window !== 'undefined') {
-  try {
-    activeWorkspace = window.localStorage.getItem(WORKSPACE_STORAGE_KEY);
-  } catch {
-    // localStorage might be unavailable (e.g., private browsing)
-  }
-}
-
-// Observable pattern for workspace changes
 const listeners = new Set<(workspace: string | null) => void>();
 
 export const getActiveWorkspace = () => activeWorkspace;
-export const getCurrentWorkspace = getActiveWorkspace; // Alias for compatibility
 
 export const setActiveWorkspace = (workspace: string | null) => {
   activeWorkspace = workspace;
-  
-  // Persist to localStorage
   if (typeof window !== 'undefined') {
     try {
       if (workspace) {
@@ -34,20 +33,10 @@ export const setActiveWorkspace = (workspace: string | null) => {
         window.localStorage.removeItem(WORKSPACE_STORAGE_KEY);
       }
     } catch {
-      // no-op
+      // no-op: localStorage might be unavailable (e.g., private browsing)
     }
   }
-  
-  // Notify listeners
-  listeners.forEach(listener => listener(activeWorkspace));
-};
-
-export const subscribeToWorkspaceChanges = (listener: (workspace: string | null) => void) => {
-  listeners.add(listener);
-  listener(activeWorkspace); // Immediate notification
-  return () => {
-    listeners.delete(listener);
-  };
+  listeners.forEach((listener) => listener(activeWorkspace));
 };
 
 export const extractWorkspaceFromPathname = (pathname: string): string | null => {
@@ -61,15 +50,36 @@ export const extractWorkspaceFromPathname = (pathname: string): string | null =>
   return decodeURIComponent(segments[2]);
 };
 
-export const buildWorkspacePath = (workspace: string, suffix = '') => {
-  const encodedWorkspace = encodeURIComponent(workspace);
-  return `/workspaces/${encodedWorkspace}${suffix}`;
+export const buildWorkspacePath = (workspace: string) => `workspaces/${encodeURIComponent(workspace)}`;
+
+export const subscribeToWorkspaceChanges = (listener: (workspace: string | null) => void) => {
+  listeners.add(listener);
+  listener(activeWorkspace);
+  return () => {
+    listeners.delete(listener);
+  };
 };
+
+export const getCurrentWorkspace = () => activeWorkspace;
 
 const isAbsoluteUrl = (value: string) => /^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(value);
 
-export const prefixRouteWithWorkspace = (to: string): string => {
-  if (!to || to.length === 0) {
+const sanitizePath = (path: string) => {
+  if (!path) {
+    return '';
+  }
+  return path.startsWith('/') ? path : `/${path}`;
+};
+
+const getWorkspaceOrDefault = () => {
+  if (!shouldEnableWorkspaces()) {
+    return null;
+  }
+  return activeWorkspace || DEFAULT_WORKSPACE_NAME;
+};
+
+export const prefixRouteWithWorkspace = (to: string) => {
+  if (typeof to !== 'string' || to.length === 0) {
     return to;
   }
 
@@ -77,7 +87,6 @@ export const prefixRouteWithWorkspace = (to: string): string => {
     return to;
   }
 
-  // Handle hash routes
   const prefix = to.startsWith('#') ? '#' : '';
   const valueWithoutPrefix = prefix ? to.slice(1) : to;
 
@@ -86,49 +95,66 @@ export const prefixRouteWithWorkspace = (to: string): string => {
     return to;
   }
 
-  // Already has workspace prefix
-  if (valueWithoutPrefix.startsWith(WORKSPACE_PREFIX)) {
-    return to;
+  if (!valueWithoutPrefix) {
+    const workspace = getWorkspaceOrDefault();
+    if (!workspace) {
+      return to;
+    }
+    return `${prefix}/workspaces/${encodeURIComponent(workspace)}`;
   }
 
-  const workspace = activeWorkspace || DEFAULT_WORKSPACE_NAME;
-  const path = valueWithoutPrefix || '/';
-  
-  return `${prefix}${buildWorkspacePath(workspace, path === '/' ? '' : path)}`;
+  // Separate hash fragment (if any)
+  let pathWithQuery = valueWithoutPrefix;
+  let hashFragment = '';
+  const hashIndex = pathWithQuery.indexOf('#');
+  if (hashIndex >= 0) {
+    hashFragment = pathWithQuery.slice(hashIndex);
+    pathWithQuery = pathWithQuery.slice(0, hashIndex);
+  }
+
+  // Separate query string (if any)
+  let queryString = '';
+  const queryIndex = pathWithQuery.indexOf('?');
+  if (queryIndex >= 0) {
+    queryString = pathWithQuery.slice(queryIndex);
+    pathWithQuery = pathWithQuery.slice(0, queryIndex);
+  }
+
+  const normalizedPath = sanitizePath(pathWithQuery);
+
+  if (normalizedPath.startsWith('/workspaces/')) {
+    return `${prefix}${normalizedPath}${queryString}${hashFragment}`;
+  }
+
+  const workspace = getWorkspaceOrDefault();
+  if (!workspace) {
+    return `${prefix}${normalizedPath}${queryString}${hashFragment}`;
+  }
+
+  const workspacePath = `/workspaces/${encodeURIComponent(workspace)}`;
+  const finalPath = normalizedPath === '/' ? workspacePath : `${workspacePath}${normalizedPath}`;
+
+  return `${prefix}${finalPath}${queryString}${hashFragment}`;
 };
 
-export const prefixPathnameWithWorkspace = (pathname: string): string => {
-  if (!pathname || !shouldEnableWorkspaces()) {
+export const prefixPathnameWithWorkspace = (pathname: string | undefined) => {
+  if (!pathname) {
+    const workspace = getWorkspaceOrDefault();
+    return workspace ? `/workspaces/${encodeURIComponent(workspace)}` : pathname;
+  }
+  if (!shouldEnableWorkspaces() || isAbsoluteUrl(pathname) || !pathname.startsWith('/')) {
     return pathname;
   }
-
-  if (pathname.startsWith(WORKSPACE_PREFIX)) {
-    return pathname;
+  const sanitized = sanitizePath(pathname);
+  if (sanitized.startsWith('/workspaces/')) {
+    return sanitized;
   }
-
-  const workspace = activeWorkspace || DEFAULT_WORKSPACE_NAME;
-  return buildWorkspacePath(workspace, pathname === '/' ? '' : pathname);
-};
-
-// Prefix API URLs with workspace
-export const prefixWithWorkspace = (url: string): string => {
-  if (!shouldEnableWorkspaces() || typeof url !== 'string') {
-    return url;
+  const workspace = getWorkspaceOrDefault();
+  if (!workspace) {
+    return sanitized;
   }
-
-  // Don't prefix workspace management endpoints
-  if (url.includes('ajax-api/2.0/mlflow/workspaces')) {
-    return url;
+  if (sanitized === '/' || sanitized === '') {
+    return `/workspaces/${encodeURIComponent(workspace)}`;
   }
-
-  const workspace = activeWorkspace;
-  if (!workspace || !url.includes('ajax-api/2.0/mlflow/')) {
-    return url;
-  }
-
-  // Inject workspace into path
-  return url.replace(
-    'ajax-api/2.0/mlflow/',
-    `ajax-api/2.0/mlflow/workspaces/${encodeURIComponent(workspace)}/`
-  );
+  return `/workspaces/${encodeURIComponent(workspace)}${sanitized}`;
 };

@@ -1,15 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { DropdownMenu, Input, Tooltip, useDesignSystemTheme, LegacySkeleton } from '@databricks/design-system';
+import { LegacySelect, useDesignSystemTheme } from '@databricks/design-system';
 
-import { shouldEnableWorkspaces, setWorkspacesEnabled } from '../utils/FeatureUtils';
+import { shouldEnableWorkspaces } from '../utils/FeatureUtils';
 import { fetchAPI, getAjaxUrl } from '../utils/FetchUtils';
-import {
-  DEFAULT_WORKSPACE_NAME,
-  extractWorkspaceFromPathname,
-  setActiveWorkspace,
-  buildWorkspacePath,
-} from '../utils/WorkspaceUtils';
-import { useLocation, useNavigate, matchPath } from '../utils/RoutingUtils';
+import { DEFAULT_WORKSPACE_NAME, extractWorkspaceFromPathname, setActiveWorkspace } from '../utils/WorkspaceUtils';
+import { useLocation, useNavigate } from '../utils/RoutingUtils';
 
 type Workspace = {
   name: string;
@@ -18,25 +13,11 @@ type Workspace = {
 
 const WORKSPACES_ENDPOINT = 'ajax-api/2.0/mlflow/workspaces';
 
-// Get current navigation section for smart redirect
-const getNavigationSection = (pathname: string): string => {
-  if (matchPath('/experiments/*', pathname) || matchPath('/compare-experiments/*', pathname)) {
-    return 'experiments';
-  }
-  if (matchPath('/models/*', pathname)) {
-    return 'models';
-  }
-  if (matchPath('/prompts/*', pathname)) {
-    return 'prompts';
-  }
-  return '';
-};
-
 export const WorkspaceSelector = () => {
+  const workspacesEnabled = shouldEnableWorkspaces();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
-  const [filterText, setFilterText] = useState('');
   const location = useLocation();
   const navigate = useNavigate();
   const { theme } = useDesignSystemTheme();
@@ -44,29 +25,25 @@ export const WorkspaceSelector = () => {
   const workspaceFromPath = extractWorkspaceFromPathname(location.pathname);
   const currentWorkspace = workspaceFromPath ?? DEFAULT_WORKSPACE_NAME;
 
-  // Dynamic workspace detection with timeout
   useEffect(() => {
-    let isMounted = true;
-    const controller = new AbortController();
+    if (!workspacesEnabled) {
+      setWorkspaces([]);
+      setLoadFailed(false);
+      return;
+    }
 
+    let isMounted = true;
     const loadWorkspaces = async () => {
       setLoading(true);
       setLoadFailed(false);
-
       try {
-        // 3 second timeout for dynamic detection
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
-        
-        const response = await fetchAPI(getAjaxUrl(WORKSPACES_ENDPOINT), 'GET', undefined, controller.signal);
-        clearTimeout(timeoutId);
-
+        const response = await fetchAPI(getAjaxUrl(WORKSPACES_ENDPOINT));
         if (!isMounted) {
           return;
         }
 
         const fetched = Array.isArray(response?.workspaces) ? response.workspaces : [];
         const filteredWorkspaces: Workspace[] = [];
-        
         for (const item of fetched as Array<Workspace | Record<string, unknown>>) {
           if (item && typeof (item as Workspace)?.name === 'string') {
             const workspaceItem = item as Workspace;
@@ -76,15 +53,11 @@ export const WorkspaceSelector = () => {
             });
           }
         }
-
         setWorkspaces(filteredWorkspaces);
-        setWorkspacesEnabled(filteredWorkspaces.length > 0);
-      } catch (error) {
-        if (isMounted && !controller.signal.aborted) {
+      } catch {
+        if (isMounted) {
           setLoadFailed(true);
         }
-        // Timeout or error means workspaces disabled
-        setWorkspacesEnabled(false);
       } finally {
         if (isMounted) {
           setLoading(false);
@@ -96,113 +69,55 @@ export const WorkspaceSelector = () => {
 
     return () => {
       isMounted = false;
-      controller.abort();
     };
-  }, []);
+  }, [workspacesEnabled]);
 
-  // Filter workspaces based on search text
-  const filteredWorkspaces = useMemo(() => {
-    if (!filterText) {
-      return workspaces;
-    }
-    return workspaces.filter(w => 
-      w.name.toLowerCase().includes(filterText.toLowerCase())
-    );
-  }, [workspaces, filterText]);
-
-  // Ensure current workspace is in list
   const options = useMemo(() => {
     const deduped = new Map<string, Workspace>();
 
-    for (const workspace of filteredWorkspaces) {
+    for (const workspace of workspaces) {
       deduped.set(workspace.name, workspace);
     }
 
-    if (deduped.size === 0 && !filterText) {
+    if (deduped.size === 0) {
       deduped.set(DEFAULT_WORKSPACE_NAME, { name: DEFAULT_WORKSPACE_NAME, description: null });
     }
 
-    if (currentWorkspace && !deduped.has(currentWorkspace) && !filterText) {
+    if (currentWorkspace && !deduped.has(currentWorkspace)) {
       deduped.set(currentWorkspace, { name: currentWorkspace, description: null });
     }
 
     return Array.from(deduped.values());
-  }, [filteredWorkspaces, currentWorkspace, filterText]);
+  }, [workspaces, currentWorkspace]);
 
-  const handleWorkspaceChange = (nextWorkspace: string) => {
+  const handleWorkspaceChange = (nextWorkspace?: string) => {
     if (!nextWorkspace || nextWorkspace === currentWorkspace) {
       return;
     }
 
+    const encodedWorkspace = encodeURIComponent(nextWorkspace);
     setActiveWorkspace(nextWorkspace);
-    
-    // Smart navigation: preserve current section
-    const section = getNavigationSection(location.pathname);
-    const suffix = section ? `/${section}` : '';
-    const targetPath = buildWorkspacePath(nextWorkspace, suffix);
-    
-    navigate(`/${targetPath}${location.search ?? ''}`, { replace: true });
+    navigate(`/workspaces/${encodedWorkspace}`);
   };
 
-  if (!shouldEnableWorkspaces()) {
-    return null;
-  }
-
-  if (loading) {
-    return <LegacySkeleton />;
-  }
-
-  if (loadFailed) {
+  if (!workspacesEnabled) {
     return null;
   }
 
   return (
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger asChild>
-        <button
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: theme.colors.textSecondary,
-            cursor: 'pointer',
-            fontSize: theme.typography.fontSizeSm,
-          }}
-        >
-          {currentWorkspace}
-        </button>
-      </DropdownMenu.Trigger>
-      
-      <DropdownMenu.Content align="start">
-        {/* Client-side filter */}
-        <div style={{ padding: theme.spacing.sm }}>
-          <Input
-            componentId="workspace_selector_filter"
-            placeholder="Filter workspaces..."
-            value={filterText}
-            onChange={(e) => setFilterText(e.target.value)}
-            size="small"
-          />
-        </div>
-        
-        {options.length === 0 && filterText && (
-          <DropdownMenu.Label>No workspaces found</DropdownMenu.Label>
-        )}
-        
-        {options.map((workspace) => (
-          <Tooltip 
-            key={workspace.name} 
-            componentId={`workspace_selector_tooltip_${workspace.name}`}
-            content={workspace.description || workspace.name}
-          >
-            <DropdownMenu.Item
-              componentId={`workspace_selector_${workspace.name}`}
-              onClick={() => handleWorkspaceChange(workspace.name)}
-            >
-              {workspace.name}
-            </DropdownMenu.Item>
-          </Tooltip>
-        ))}
-      </DropdownMenu.Content>
-    </DropdownMenu.Root>
+    <LegacySelect
+      value={currentWorkspace}
+      placeholder="Select workspace"
+      onChange={handleWorkspaceChange}
+      loading={loading}
+      css={{ minWidth: theme.spacing.lg * 5, maxWidth: theme.spacing.lg * 7 }}
+      aria-label="Workspace selector"
+    >
+      {options.map((workspace) => (
+        <LegacySelect.Option key={workspace.name} value={workspace.name}>
+          {workspace.name}
+        </LegacySelect.Option>
+      ))}
+    </LegacySelect>
   );
 };
