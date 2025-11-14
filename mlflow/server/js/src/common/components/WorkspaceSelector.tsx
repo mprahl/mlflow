@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { LegacySelect, useDesignSystemTheme } from '@databricks/design-system';
+import { Button, DropdownMenu, Input, Tooltip, useDesignSystemTheme } from '@databricks/design-system';
 
 import { shouldEnableWorkspaces } from '../utils/FeatureUtils';
 import { fetchAPI, getAjaxUrl } from '../utils/FetchUtils';
-import { DEFAULT_WORKSPACE_NAME, extractWorkspaceFromPathname, setActiveWorkspace } from '../utils/WorkspaceUtils';
+import { DEFAULT_WORKSPACE_NAME, extractWorkspaceFromPathname, setActiveWorkspace, setAvailableWorkspaces } from '../utils/WorkspaceUtils';
 import { useLocation, useNavigate } from '../utils/RoutingUtils';
 
 type Workspace = {
@@ -18,6 +18,7 @@ export const WorkspaceSelector = () => {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const location = useLocation();
   const navigate = useNavigate();
   const { theme } = useDesignSystemTheme();
@@ -54,9 +55,12 @@ export const WorkspaceSelector = () => {
           }
         }
         setWorkspaces(filteredWorkspaces);
+        // Store available workspaces for access validation
+        setAvailableWorkspaces(filteredWorkspaces.map(w => w.name));
       } catch {
         if (isMounted) {
           setLoadFailed(true);
+          setAvailableWorkspaces([]);
         }
       } finally {
         if (isMounted) {
@@ -90,6 +94,23 @@ export const WorkspaceSelector = () => {
     return Array.from(deduped.values());
   }, [workspaces, currentWorkspace]);
 
+  // Client-side filtering
+  const filteredOptions = useMemo(() => {
+    if (!searchTerm) {
+      return options;
+    }
+    const lowerSearch = searchTerm.toLowerCase();
+    return options.filter((workspace) => workspace.name.toLowerCase().includes(lowerSearch));
+  }, [options, searchTerm]);
+
+  // Smart redirect - preserve navigation context
+  const getNavigationSection = (pathname: string): string => {
+    if (pathname.includes('/experiments')) return '/experiments';
+    if (pathname.includes('/models')) return '/models';
+    if (pathname.includes('/prompts')) return '/prompts';
+    return '';
+  };
+
   const handleWorkspaceChange = (nextWorkspace?: string) => {
     if (!nextWorkspace || nextWorkspace === currentWorkspace) {
       return;
@@ -97,7 +118,13 @@ export const WorkspaceSelector = () => {
 
     const encodedWorkspace = encodeURIComponent(nextWorkspace);
     setActiveWorkspace(nextWorkspace);
-    navigate(`/workspaces/${encodedWorkspace}`);
+    
+    // Smart redirect - preserve navigation section
+    const currentSection = getNavigationSection(location.pathname);
+    const targetPath = `/workspaces/${encodedWorkspace}${currentSection}`;
+    
+    navigate(targetPath);
+    setSearchTerm(''); // Clear search on selection
   };
 
   if (!workspacesEnabled) {
@@ -105,19 +132,77 @@ export const WorkspaceSelector = () => {
   }
 
   return (
-    <LegacySelect
-      value={currentWorkspace}
-      placeholder="Select workspace"
-      onChange={handleWorkspaceChange}
-      loading={loading}
-      css={{ minWidth: theme.spacing.lg * 5, maxWidth: theme.spacing.lg * 7 }}
-      aria-label="Workspace selector"
-    >
-      {options.map((workspace) => (
-        <LegacySelect.Option key={workspace.name} value={workspace.name}>
-          {workspace.name}
-        </LegacySelect.Option>
-      ))}
-    </LegacySelect>
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <Button 
+          componentId="workspace_selector"
+          loading={loading}
+          type="tertiary"
+        >
+          {currentWorkspace}
+        </Button>
+      </DropdownMenu.Trigger>
+      
+      <DropdownMenu.Content 
+        align="start" 
+        css={{ 
+          minWidth: 250,
+          maxHeight: 400,
+          overflowY: 'auto',
+          zIndex: 9999, // Ensure dropdown appears above all other content
+        }}
+      >
+        <div 
+          css={{ 
+            padding: theme.spacing.sm,
+            position: 'sticky',
+            top: 0,
+            backgroundColor: theme.colors.backgroundPrimary,
+            zIndex: 1,
+          }}
+          onClick={(e) => e.stopPropagation()} // Prevent dropdown from closing when clicking input
+        >
+          <Input
+            placeholder="Filter workspaces..."
+            value={searchTerm}
+            onChange={(e) => {
+              e.stopPropagation(); // Prevent event bubbling
+              setSearchTerm(e.target.value);
+            }}
+            onClick={(e) => e.stopPropagation()} // Prevent dropdown from closing
+            componentId="workspace_filter"
+            autoFocus
+          />
+        </div>
+        
+        {loadFailed && (
+          <DropdownMenu.Label css={{ color: theme.colors.textValidationDanger }}>
+            Failed to load workspaces
+          </DropdownMenu.Label>
+        )}
+        
+        {filteredOptions.length === 0 && searchTerm && (
+          <DropdownMenu.Label>No workspaces found</DropdownMenu.Label>
+        )}
+        
+        {filteredOptions.map((workspace) => (
+          <Tooltip 
+            key={workspace.name} 
+            content={workspace.description || workspace.name}
+            componentId={`workspace_tooltip_${workspace.name}`}
+          >
+            <DropdownMenu.Item
+              componentId={`workspace_item_${workspace.name}`}
+              onClick={() => handleWorkspaceChange(workspace.name)}
+              css={{
+                fontWeight: workspace.name === currentWorkspace ? 'bold' : 'normal',
+              }}
+            >
+              {workspace.name}
+            </DropdownMenu.Item>
+          </Tooltip>
+        ))}
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
   );
 };

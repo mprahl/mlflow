@@ -48,8 +48,13 @@ export const getDefaultHeadersFromCookies = (cookieStr: any) => {
 
 export const getDefaultHeaders = (cookieStr: any) => {
   const cookieHeaders = getDefaultHeadersFromCookies(cookieStr);
+  
+  // Forward Authorization header for OAuth/Kubernetes integration
+  const authHeader = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('mlflow-auth-header') : null;
+  
   return {
     ...cookieHeaders,
+    ...(authHeader ? { Authorization: authHeader } : {}),
   };
 };
 

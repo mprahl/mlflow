@@ -14,6 +14,7 @@ const getStoredWorkspace = () => {
 };
 
 let activeWorkspace: string | null = getStoredWorkspace();
+let availableWorkspaces: string[] = [];
 
 const WORKSPACE_PREFIX = '/workspaces/';
 
@@ -61,6 +62,18 @@ export const subscribeToWorkspaceChanges = (listener: (workspace: string | null)
 };
 
 export const getCurrentWorkspace = () => activeWorkspace;
+
+export const setAvailableWorkspaces = (workspaces: string[]) => {
+  availableWorkspaces = workspaces;
+};
+
+export const getAvailableWorkspaces = () => availableWorkspaces;
+
+export const hasWorkspaceAccess = (workspace: string | null): boolean => {
+  if (!workspace) return true;
+  if (availableWorkspaces.length === 0) return true; // Not loaded yet, assume access
+  return availableWorkspaces.includes(workspace);
+};
 
 const isAbsoluteUrl = (value: string) => /^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(value);
 
