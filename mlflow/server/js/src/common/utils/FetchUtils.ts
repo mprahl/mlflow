@@ -58,6 +58,22 @@ export const getDefaultHeaders = (cookieStr: any) => {
   };
 };
 
+const requiresWorkspacePrefixWithoutMlflow = (segments: string[]) => {
+  if (!segments.length) {
+    return false;
+  }
+  if (segments[0] === 'graphql') {
+    return true;
+  }
+  if (segments[0] === 'get-artifact') {
+    return true;
+  }
+  if (segments[0] === 'model-versions' && segments[1] === 'get-artifact') {
+    return true;
+  }
+  return false;
+};
+
 const prefixWithWorkspace = (relativeUrl: string) => {
   const workspace = getActiveWorkspace();
   if (!workspace || typeof relativeUrl !== 'string' || relativeUrl.length === 0) {
@@ -66,7 +82,10 @@ const prefixWithWorkspace = (relativeUrl: string) => {
 
   const needsLeadingSlash = relativeUrl.startsWith('/');
   const normalized = needsLeadingSlash ? relativeUrl.slice(1) : relativeUrl;
-  const segments = normalized.split('/');
+  const suffixIndex = normalized.search(/[?#]/);
+  const pathOnly = suffixIndex === -1 ? normalized : normalized.slice(0, suffixIndex);
+  const suffix = suffixIndex === -1 ? '' : normalized.slice(suffixIndex);
+  const segments = pathOnly.split('/');
   const mlflowIndex = segments.findIndex((segment) => segment === 'mlflow');
 
   if (mlflowIndex === -1) {
@@ -74,11 +93,12 @@ const prefixWithWorkspace = (relativeUrl: string) => {
       return relativeUrl;
     }
 
-    if (segments[0] === 'graphql') {
+    if (requiresWorkspacePrefixWithoutMlflow(segments)) {
       const workspaceSegments = buildWorkspacePath(workspace).split('/');
       const prefixedSegments = [...workspaceSegments, ...segments];
       const prefixed = prefixedSegments.join('/');
-      return needsLeadingSlash ? `/${prefixed}` : prefixed;
+      const value = `${prefixed}${suffix}`;
+      return needsLeadingSlash ? `/${value}` : value;
     }
 
     return relativeUrl;
@@ -92,7 +112,8 @@ const prefixWithWorkspace = (relativeUrl: string) => {
   segments.splice(mlflowIndex + 1, 0, ...workspaceSegments);
 
   const prefixed = segments.join('/');
-  return needsLeadingSlash ? `/${prefixed}` : prefixed;
+  const value = `${prefixed}${suffix}`;
+  return needsLeadingSlash ? `/${value}` : value;
 };
 
 export const getAjaxUrl = (relativeUrl: any) => {

@@ -30,6 +30,7 @@ import {
   type Location,
   type NavigateFunction,
   type Params,
+  type PathMatch,
 } from 'react-router-dom';
 
 /**
@@ -132,4 +133,4 @@ export const createLazyRouteElement = (
 export const createRouteElement = (component: React.ComponentType<React.PropsWithChildren<any>>) =>
   React.createElement(component);
 
-export type { Location, NavigateFunction, Params, To, NavigateOptions };
+export type { Location, NavigateFunction, Params, To, NavigateOptions, PathMatch };

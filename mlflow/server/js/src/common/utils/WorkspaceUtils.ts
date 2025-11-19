@@ -88,7 +88,12 @@ const getWorkspaceOrDefault = () => {
   if (!shouldEnableWorkspaces()) {
     return null;
   }
-  return activeWorkspace || DEFAULT_WORKSPACE_NAME;
+  // When navigating directly to a workspace-specific route, the router might render
+  // before `setActiveWorkspace` is called. In that case, fall back to the workspace
+  // encoded in the current pathname so links remain workspace-aware on first render.
+  const workspaceFromPath =
+    typeof window !== 'undefined' ? extractWorkspaceFromPathname(window.location.pathname) : null;
+  return activeWorkspace || workspaceFromPath || DEFAULT_WORKSPACE_NAME;
 };
 
 export const prefixRouteWithWorkspace = (to: string) => {

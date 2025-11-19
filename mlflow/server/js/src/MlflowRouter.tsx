@@ -31,6 +31,7 @@ import {
   subscribeToWorkspaceChanges,
   getCurrentWorkspace,
 } from './common/utils/WorkspaceUtils';
+import { prefixRoutePathWithWorkspace } from './common/utils/WorkspaceRouteUtils';
 
 /**
  * This is the MLflow default entry/landing route.
@@ -164,34 +165,13 @@ const WorkspaceAwareRootRoute = (props: React.ComponentProps<typeof MlflowRootRo
   </>
 );
 
-const prefixPathWithWorkspace = (path?: string) => {
-  if (!path) {
-    return path;
-  }
-
-  if (path.startsWith('/workspaces/:workspaceName')) {
-    return path;
-  }
-
-  if (path === '/') {
-    return '/workspaces/:workspaceName';
-  }
-
-  if (path === '*') {
-    return 'workspaces/:workspaceName/*';
-  }
-
-  const normalized = path.startsWith('/') ? path : `/${path}`;
-  return `/workspaces/:workspaceName${normalized}`;
-};
-
 const prependWorkspaceToRoutes = (routeDefs: MlflowRouteDef[]): MlflowRouteDef[] =>
   routeDefs.map((route) => {
     const children = route.children ? prependWorkspaceToRoutes(route.children) : undefined;
 
     return {
       ...route,
-      path: prefixPathWithWorkspace(route.path),
+      path: prefixRoutePathWithWorkspace(route.path),
       ...(children ? { children } : {}),
     };
   });

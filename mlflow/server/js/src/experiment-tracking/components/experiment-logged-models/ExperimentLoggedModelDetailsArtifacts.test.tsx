@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from '@jest/globals';
+import { afterAll, afterEach, beforeAll, describe, expect, test } from '@jest/globals';
 import { DesignSystemProvider } from '@databricks/design-system';
 import userEvent from '@testing-library/user-event';
 import { rest } from 'msw';
@@ -12,11 +12,12 @@ import { render, waitFor } from '../../../common/utils/TestUtils.react18';
 import { apis, artifactsByRunUuid } from '../../reducers/Reducers';
 import { ExperimentLoggedModelDetailsArtifacts } from './ExperimentLoggedModelDetailsArtifacts';
 import { setupTestRouter, testRoute, TestRouter } from '../../../common/utils/RoutingTestUtils';
+import { setActiveWorkspace } from '../../../common/utils/WorkspaceUtils';
 
 describe('ExperimentLoggedModelDetailsArtifacts integration test', () => {
   const { history } = setupTestRouter();
   const server = setupServer(
-    rest.get('/ajax-api/2.0/mlflow/logged-models/:modelId/artifacts/directories', (req, res, ctx) =>
+    rest.get(/\/ajax-api\/2\.0\/mlflow(?:\/workspaces\/[^/]+)?\/logged-models\/[^/]+\/artifacts\/directories/, (req, res, ctx) =>
       res(
         ctx.json({
           root_uri: 'dbfs:/databricks/mlflow-tracking/123/logged_models/test-model-id/artifacts',
@@ -35,10 +36,10 @@ describe('ExperimentLoggedModelDetailsArtifacts integration test', () => {
         }),
       ),
     ),
-    rest.get('/ajax-api/2.0/mlflow/logged-models/:modelId/artifacts/files', (req, res, ctx) =>
+    rest.get(/\/ajax-api\/2\.0\/mlflow(?:\/workspaces\/[^/]+)?\/logged-models\/[^/]+\/artifacts\/files/, (req, res, ctx) =>
       res(ctx.text('this is text file content of ' + req.url.searchParams.get('artifact_file_path'))),
     ),
-    rest.get('/get-artifact', (req, res, ctx) =>
+    rest.get(/\/(?:workspaces\/[^/]+\/)?get-artifact/, (req, res, ctx) =>
       res(ctx.text('this is text file content of ' + req.url.searchParams.get('path'))),
     ),
   );
@@ -77,8 +78,18 @@ describe('ExperimentLoggedModelDetailsArtifacts integration test', () => {
   };
 
   beforeAll(() => {
+    setActiveWorkspace('team-a');
     process.env['MLFLOW_USE_ABSOLUTE_AJAX_URLS'] = 'true';
     server.listen();
+  });
+
+  afterAll(() => {
+    setActiveWorkspace(null);
+    server.close();
+  });
+
+  afterEach(() => {
+    server.resetHandlers();
   });
 
   test('should render list of artifacts and display file contents', async () => {

@@ -1,3 +1,4 @@
+import { getAjaxUrl as workspaceAwareGetAjaxUrl } from '@mlflow/mlflow/src/common/utils/FetchUtils';
 import { matchPredefinedError } from '../../errors';
 
 // eslint-disable-next-line no-restricted-globals
@@ -34,12 +35,7 @@ export const makeRequest = async <T>(path: string, method: 'POST' | 'GET', body?
   return response.json();
 };
 
-export const getAjaxUrl = (relativeUrl: any) => {
-  if (process.env['MLFLOW_USE_ABSOLUTE_AJAX_URLS'] === 'true' && !relativeUrl.startsWith('/')) {
-    return '/' + relativeUrl;
-  }
-  return relativeUrl;
-};
+export const getAjaxUrl = (relativeUrl: any) => workspaceAwareGetAjaxUrl(relativeUrl);
 
 // Parse cookies from document.cookie
 function parseCookies(cookieString = document.cookie) {
