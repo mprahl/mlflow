@@ -8,20 +8,22 @@ describe('ArtifactUtils workspace-aware URLs', () => {
     setActiveWorkspace(null);
   });
 
-  test('getArtifactLocationUrl includes workspace prefix when active', () => {
+  test('getArtifactLocationUrl omits workspace segment and relies on headers', () => {
     setActiveWorkspace('team-a');
     const url = getArtifactLocationUrl('file.txt', 'run-123');
 
-    expect(url).toContain('workspaces/team-a/get-artifact');
+    expect(url).toContain('get-artifact');
+    expect(url).not.toContain('workspaces');
     expect(url).toContain('path=file.txt');
     expect(url).toContain('run_uuid=run-123');
   });
 
-  test('getLoggedModelArtifactLocationUrl includes workspace prefix when active', () => {
+  test('getLoggedModelArtifactLocationUrl omits workspace segment and relies on headers', () => {
     setActiveWorkspace('team-b');
     const url = getLoggedModelArtifactLocationUrl('dir/file.txt', '42');
 
-    expect(url).toContain('mlflow/workspaces/team-b/logged-models/42/artifacts/files');
+    expect(url).toContain('mlflow/logged-models/42/artifacts/files');
+    expect(url).not.toContain('workspaces');
     expect(url).toContain('artifact_file_path=dir%2Ffile.txt');
   });
 });

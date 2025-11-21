@@ -11,7 +11,7 @@ import yaml from 'js-yaml';
 import { pickBy } from 'lodash';
 import { ErrorWrapper } from './ErrorWrapper';
 import { matchPredefinedError } from '@databricks/web-shared/errors';
-import { getActiveWorkspace, buildWorkspacePath } from './WorkspaceUtils';
+import { getWorkspaceOrDefault } from './WorkspaceUtils';
 
 export const HTTPMethods = {
   GET: 'GET',
@@ -48,84 +48,28 @@ export const getDefaultHeadersFromCookies = (cookieStr: any) => {
 
 export const getDefaultHeaders = (cookieStr: any) => {
   const cookieHeaders = getDefaultHeadersFromCookies(cookieStr);
-  
+
   // Forward Authorization header for OAuth/Kubernetes integration
   const authHeader = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('mlflow-auth-header') : null;
-  
+
+  const workspace = getWorkspaceOrDefault();
+
   return {
     ...cookieHeaders,
     ...(authHeader ? { Authorization: authHeader } : {}),
+    ...(workspace ? { 'X-MLFLOW-WORKSPACE': workspace } : {}),
   };
 };
 
-const requiresWorkspacePrefixWithoutMlflow = (segments: string[]) => {
-  if (!segments.length) {
-    return false;
-  }
-  if (segments[0] === 'graphql') {
-    return true;
-  }
-  if (segments[0] === 'get-artifact') {
-    return true;
-  }
-  if (segments[0] === 'model-versions' && segments[1] === 'get-artifact') {
-    return true;
-  }
-  return false;
-};
-
-const prefixWithWorkspace = (relativeUrl: string) => {
-  const workspace = getActiveWorkspace();
-  if (!workspace || typeof relativeUrl !== 'string' || relativeUrl.length === 0) {
-    return relativeUrl;
-  }
-
-  const needsLeadingSlash = relativeUrl.startsWith('/');
-  const normalized = needsLeadingSlash ? relativeUrl.slice(1) : relativeUrl;
-  const suffixIndex = normalized.search(/[?#]/);
-  const pathOnly = suffixIndex === -1 ? normalized : normalized.slice(0, suffixIndex);
-  const suffix = suffixIndex === -1 ? '' : normalized.slice(suffixIndex);
-  const segments = pathOnly.split('/');
-  const mlflowIndex = segments.findIndex((segment) => segment === 'mlflow');
-
-  if (mlflowIndex === -1) {
-    if (segments[0] === 'workspaces') {
-      return relativeUrl;
-    }
-
-    if (requiresWorkspacePrefixWithoutMlflow(segments)) {
-      const workspaceSegments = buildWorkspacePath(workspace).split('/');
-      const prefixedSegments = [...workspaceSegments, ...segments];
-      const prefixed = prefixedSegments.join('/');
-      const value = `${prefixed}${suffix}`;
-      return needsLeadingSlash ? `/${value}` : value;
-    }
-
-    return relativeUrl;
-  }
-
-  if (segments[mlflowIndex + 1] === 'workspaces') {
-    return relativeUrl;
-  }
-
-  const workspaceSegments = buildWorkspacePath(workspace).split('/');
-  segments.splice(mlflowIndex + 1, 0, ...workspaceSegments);
-
-  const prefixed = segments.join('/');
-  const value = `${prefixed}${suffix}`;
-  return needsLeadingSlash ? `/${value}` : value;
-};
-
 export const getAjaxUrl = (relativeUrl: any) => {
-  const urlWithWorkspace = typeof relativeUrl === 'string' ? prefixWithWorkspace(relativeUrl) : relativeUrl;
   if (
     process.env['MLFLOW_USE_ABSOLUTE_AJAX_URLS'] === 'true' &&
-    typeof urlWithWorkspace === 'string' &&
-    !urlWithWorkspace.startsWith('/')
+    typeof relativeUrl === 'string' &&
+    !relativeUrl.startsWith('/')
   ) {
-    return '/' + urlWithWorkspace;
+    return '/' + relativeUrl;
   }
-  return urlWithWorkspace;
+  return relativeUrl;
 };
 
 // return response json by default, if response is not parsable to json,

@@ -15,18 +15,18 @@ describe('fetchArtifactUnified', () => {
   const loggedModelArtifactContent = 'test-logged-model-artifact-content';
 
   const server = setupServer(
-    rest.get(/\/(?:workspaces\/[^/]+\/)?get-artifact/, (req, res, ctx) => {
+    rest.get(/\/?get-artifact/, (req, res, ctx) => {
+      expect(req.headers.get('X-MLFLOW-WORKSPACE')).toBe('team-a');
       return res(ctx.body(runArtifactContent));
     }),
-    rest.get('/ajax-api/2.0/mlflow/get-artifact', (req, res, ctx) => {
+    rest.get(/\/?ajax-api\/2\.0\/mlflow\/get-artifact/, (req, res, ctx) => {
+      expect(req.headers.get('X-MLFLOW-WORKSPACE')).toBe('team-a');
       return res(ctx.body(runArtifactContent));
     }),
-    rest.get(
-      /\/ajax-api\/2\.0\/mlflow(?:\/workspaces\/[^/]+)?\/logged-models\/test-logged-model-id\/artifacts\/files/,
-      (req, res, ctx) => {
+    rest.get(/\/?ajax-api\/2\.0\/mlflow\/logged-models\/test-logged-model-id\/artifacts\/files/, (req, res, ctx) => {
+      expect(req.headers.get('X-MLFLOW-WORKSPACE')).toBe('team-a');
       return res(ctx.body(loggedModelArtifactContent));
-      },
-    ),
+    }),
   );
 
   beforeAll(() => {

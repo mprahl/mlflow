@@ -23,15 +23,15 @@ describe('graphqlFetch', () => {
     global.fetch = originalFetch;
   });
 
-  it('prefixes graphql requests with the workspace-aware ajax url', async () => {
-    const prefixedUrl = '/mlflow/workspaces/team-a/graphql';
-    getAjaxUrl.mockImplementation((relativeUrl: string) => `/mlflow/workspaces/team-a/${relativeUrl}`);
+  it('resolves graphql requests via the ajax url helper', async () => {
+    const resolvedUrl = '/graphql';
+    getAjaxUrl.mockImplementation(() => resolvedUrl);
 
     await graphqlFetch('graphql', { headers: { 'X-Test': '1' } });
 
     expect(getAjaxUrl).toHaveBeenCalledWith('graphql');
     expect(fetchMock).toHaveBeenCalledWith(
-      prefixedUrl,
+      resolvedUrl,
       expect.objectContaining({
         headers: expect.any(Headers),
       }),

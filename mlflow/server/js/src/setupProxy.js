@@ -1,17 +1,5 @@
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
-const workspaceAwareFilter = (basePath) => (pathname) => {
-  const [pathWithoutQuery] = pathname.split('?');
-  if (pathWithoutQuery.startsWith(basePath)) {
-    return true;
-  }
-  if (!pathWithoutQuery.startsWith('/workspaces/')) {
-    return false;
-  }
-  const remainder = pathWithoutQuery.replace(/^\/workspaces\/[^/]+/, '');
-  return remainder.startsWith(basePath);
-};
-
 // eslint-disable-next-line
 module.exports = function (app) {
   // The MLflow Gunicorn server is running on port 5000, so we should redirect server requests
@@ -29,20 +17,20 @@ module.exports = function (app) {
     }),
   );
   app.use(
-    createProxyMiddleware(workspaceAwareFilter('/graphql'), {
+    createProxyMiddleware('/graphql', {
       target: proxyTarget,
       changeOrigin: true,
     }),
   );
   app.use(
-    createProxyMiddleware(workspaceAwareFilter('/get-artifact'), {
+    createProxyMiddleware('/get-artifact', {
       target: proxyStaticTarget,
       ws: true,
       changeOrigin: true,
     }),
   );
   app.use(
-    createProxyMiddleware(workspaceAwareFilter('/model-versions/get-artifact'), {
+    createProxyMiddleware('/model-versions/get-artifact', {
       target: proxyStaticTarget,
       ws: true,
       changeOrigin: true,

@@ -17,8 +17,9 @@ import { setActiveWorkspace } from '../../../common/utils/WorkspaceUtils';
 describe('ExperimentLoggedModelDetailsArtifacts integration test', () => {
   const { history } = setupTestRouter();
   const server = setupServer(
-    rest.get(/\/ajax-api\/2\.0\/mlflow(?:\/workspaces\/[^/]+)?\/logged-models\/[^/]+\/artifacts\/directories/, (req, res, ctx) =>
-      res(
+    rest.get(/\/?ajax-api\/2\.0\/mlflow\/logged-models\/[^/]+\/artifacts\/directories/, (req, res, ctx) => {
+      expect(req.headers.get('X-MLFLOW-WORKSPACE')).toBe('team-a');
+      return res(
         ctx.json({
           root_uri: 'dbfs:/databricks/mlflow-tracking/123/logged_models/test-model-id/artifacts',
           files: [
@@ -34,14 +35,16 @@ describe('ExperimentLoggedModelDetailsArtifacts integration test', () => {
             },
           ],
         }),
-      ),
-    ),
-    rest.get(/\/ajax-api\/2\.0\/mlflow(?:\/workspaces\/[^/]+)?\/logged-models\/[^/]+\/artifacts\/files/, (req, res, ctx) =>
-      res(ctx.text('this is text file content of ' + req.url.searchParams.get('artifact_file_path'))),
-    ),
-    rest.get(/\/(?:workspaces\/[^/]+\/)?get-artifact/, (req, res, ctx) =>
-      res(ctx.text('this is text file content of ' + req.url.searchParams.get('path'))),
-    ),
+      );
+    }),
+    rest.get(/\/?ajax-api\/2\.0\/mlflow\/logged-models\/[^/]+\/artifacts\/files/, (req, res, ctx) => {
+      expect(req.headers.get('X-MLFLOW-WORKSPACE')).toBe('team-a');
+      return res(ctx.text('this is text file content of ' + req.url.searchParams.get('artifact_file_path')));
+    }),
+    rest.get(/\/?get-artifact/, (req, res, ctx) => {
+      expect(req.headers.get('X-MLFLOW-WORKSPACE')).toBe('team-a');
+      return res(ctx.text('this is text file content of ' + req.url.searchParams.get('path')));
+    }),
   );
 
   const renderTestComponent = () => {

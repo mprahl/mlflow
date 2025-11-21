@@ -84,7 +84,7 @@ const sanitizePath = (path: string) => {
   return path.startsWith('/') ? path : `/${path}`;
 };
 
-const getWorkspaceOrDefault = () => {
+export const getWorkspaceOrDefault = () => {
   if (!shouldEnableWorkspaces()) {
     return null;
   }

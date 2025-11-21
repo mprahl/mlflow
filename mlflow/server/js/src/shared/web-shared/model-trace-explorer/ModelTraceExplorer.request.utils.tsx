@@ -1,5 +1,9 @@
 import { matchPredefinedError } from '@databricks/web-shared/errors';
-import { getAjaxUrl as workspaceAwareGetAjaxUrl } from '@mlflow/mlflow/src/common/utils/FetchUtils';
+import {
+  getAjaxUrl as workspaceAwareGetAjaxUrl,
+  getDefaultHeaders as workspaceAwareGetDefaultHeaders,
+  getDefaultHeadersFromCookies as workspaceAwareGetDefaultHeadersFromCookies,
+} from '@mlflow/mlflow/src/common/utils/FetchUtils';
 
 // eslint-disable-next-line no-restricted-globals -- See go/spog-fetch
 const fetchFn = fetch;
@@ -24,7 +28,7 @@ export const fetchAPI = async (
     signal,
     headers: {
       ...(body ? { 'Content-Type': 'application/json' } : {}),
-      ...getDefaultHeaders(document.cookie),
+      ...workspaceAwareGetDefaultHeaders(document.cookie),
     },
   };
 
@@ -50,36 +54,5 @@ export const fetchAPI = async (
 };
 
 export const getAjaxUrl = (relativeUrl: any) => workspaceAwareGetAjaxUrl(relativeUrl);
-
-// Parse cookies from document.cookie
-function parseCookies(cookieString = document.cookie) {
-  return cookieString.split(';').reduce((cookies: { [key: string]: string }, cookie: string) => {
-    const [name, value] = cookie.trim().split('=');
-    cookies[name] = decodeURIComponent(value || '');
-    return cookies;
-  }, {});
-}
-
-export const getDefaultHeadersFromCookies = (cookieStr: any) => {
-  const headerCookiePrefix = 'mlflow-request-header-';
-  const parsedCookie = parseCookies(cookieStr);
-  if (!parsedCookie || Object.keys(parsedCookie).length === 0) {
-    return {};
-  }
-  return Object.keys(parsedCookie)
-    .filter((cookieName) => cookieName.startsWith(headerCookiePrefix))
-    .reduce(
-      (acc, cookieName) => ({
-        ...acc,
-        [cookieName.substring(headerCookiePrefix.length)]: parsedCookie[cookieName],
-      }),
-      {},
-    );
-};
-
-export const getDefaultHeaders = (cookieStr: any) => {
-  const cookieHeaders = getDefaultHeadersFromCookies(cookieStr);
-  return {
-    ...cookieHeaders,
-  };
-};
+export const getDefaultHeadersFromCookies = workspaceAwareGetDefaultHeadersFromCookies;
+export const getDefaultHeaders = workspaceAwareGetDefaultHeaders;
