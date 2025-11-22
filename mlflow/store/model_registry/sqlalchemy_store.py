@@ -162,11 +162,12 @@ class SqlAlchemyStore(WorkspaceAwareMixin, AbstractStore):
         """
 
         with self.ManagedSessionMaker() as session:
-            exists_non_default_rm = session.query(
-                session.query(SqlRegisteredModel)
+            exists_non_default_rm = (
+                session.query(SqlRegisteredModel.name)
                 .filter(SqlRegisteredModel.workspace != DEFAULT_WORKSPACE_NAME)
-                .exists()
-            ).scalar()
+                .first()
+                is not None
+            )
 
             if exists_non_default_rm:
                 # Only fetch details if we need to show them in error.
@@ -182,11 +183,12 @@ class SqlAlchemyStore(WorkspaceAwareMixin, AbstractStore):
                     error_code=INVALID_STATE,
                 )
 
-            exists_non_default_webhook = session.query(
-                session.query(SqlWebhook)
+            exists_non_default_webhook = (
+                session.query(SqlWebhook.webhook_id)
                 .filter(SqlWebhook.workspace != DEFAULT_WORKSPACE_NAME)
-                .exists()
-            ).scalar()
+                .first()
+                is not None
+            )
 
             if exists_non_default_webhook:
                 # Only fetch details if we need to show them in error.

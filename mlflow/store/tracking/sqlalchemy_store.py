@@ -531,11 +531,12 @@ class SqlAlchemyStore(WorkspaceAwareMixin, AbstractStore):
         """
 
         with self.ManagedSessionMaker() as session:
-            exists_non_default_experiment = session.query(
-                session.query(SqlExperiment)
+            exists_non_default_experiment = (
+                session.query(SqlExperiment.experiment_id)
                 .filter(SqlExperiment.workspace != DEFAULT_WORKSPACE_NAME)
-                .exists()
-            ).scalar()
+                .first()
+                is not None
+            )
 
             if exists_non_default_experiment:
                 # Only fetch details if we need to show them in error.
