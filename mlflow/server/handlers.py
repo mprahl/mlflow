@@ -522,11 +522,17 @@ def _get_job_store(backend_store_uri: str | None = None) -> AbstractJobStore:
     global _job_store
     if _job_store is None:
         store_uri = backend_store_uri or os.environ.get(BACKEND_STORE_URI_ENV_VAR, None)
+        if not store_uri:
+            raise MlflowException.invalid_parameter_value(
+                "Job store requires a database backend URI"
+            )
         try:
             extract_db_type_from_uri(store_uri)
         except MlflowException:
             # Require a database backend URI for the job store
-            raise ValueError("Job store requires a database backend URI")
+            raise MlflowException.invalid_parameter_value(
+                "Job store requires a database backend URI"
+            )
 
         _job_store = SqlAlchemyJobStore(store_uri)
     return _job_store
@@ -885,7 +891,7 @@ def _workspace_contains_resources(workspace_name: str) -> bool:
     """
     try:
         job_store = _get_job_store()
-    except (ValueError, MlflowException):
+    except MlflowException:
         job_store = None
 
     if job_store is not None:

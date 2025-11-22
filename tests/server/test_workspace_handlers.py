@@ -240,14 +240,20 @@ def test_delete_workspace_handler_rejects_default_experiment_with_runs(monkeypat
             assert experiment_ids == ["0"]
             return [SimpleNamespace()]
 
+    class DummyJobStore:
+        def list_jobs(self):
+            return iter([])
+
     dummy_store = DummyWorkspaceStore()
     dummy_tracking_store = DummyTrackingStore()
+    dummy_job_store = DummyJobStore()
 
     monkeypatch.setattr(handlers, "_get_workspace_store", lambda *args, **kwargs: dummy_store)
     monkeypatch.setattr(
         handlers, "_get_tracking_store", lambda *args, **kwargs: dummy_tracking_store
     )
     monkeypatch.setattr(handlers, "_get_model_registry_store", lambda *args, **kwargs: None)
+    monkeypatch.setattr(handlers, "_get_job_store", lambda *args, **kwargs: dummy_job_store)
 
     with app.test_request_context("/mlflow/workspaces/team-a", method="DELETE"):
         response = _delete_workspace_handler("team-a")
@@ -293,14 +299,20 @@ def test_delete_workspace_handler_succeeds_for_empty_workspace(monkeypatch):
         def search_runs(self, experiment_ids, **_):
             return []
 
+    class DummyJobStore:
+        def list_jobs(self):
+            return iter([])
+
     dummy_store = DummyWorkspaceStore()
     dummy_tracking_store = DummyTrackingStore()
+    dummy_job_store = DummyJobStore()
 
     monkeypatch.setattr(handlers, "_get_workspace_store", lambda *args, **kwargs: dummy_store)
     monkeypatch.setattr(
         handlers, "_get_tracking_store", lambda *args, **kwargs: dummy_tracking_store
     )
     monkeypatch.setattr(handlers, "_get_model_registry_store", lambda *args, **kwargs: None)
+    monkeypatch.setattr(handlers, "_get_job_store", lambda *args, **kwargs: dummy_job_store)
 
     with app.test_request_context("/mlflow/workspaces/team-a", method="DELETE"):
         response = _delete_workspace_handler("team-a")

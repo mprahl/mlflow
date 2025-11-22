@@ -554,11 +554,11 @@ def server(
         if workspace_store_uri:
             os.environ[MLFLOW_WORKSPACE_URI.name] = workspace_store_uri
     elif workspace_store_uri:
-        click.echo(
+        warning_msg = (
             "--workspace-store-uri was provided but workspaces are not enabled. "
-            "Workspace APIs will remain disabled unless you pass --enable-workspaces.",
-            err=True,
+            "Workspace APIs will remain disabled unless you pass --enable-workspaces."
         )
+        _logger.warning(warning_msg)
 
     if disable_security_middleware:
         os.environ["MLFLOW_SERVER_DISABLE_SECURITY_MIDDLEWARE"] = "true"
