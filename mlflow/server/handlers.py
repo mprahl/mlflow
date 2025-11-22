@@ -878,11 +878,24 @@ def _ensure_default_workspace_experiment(workspace_name: str) -> None:
 
 def _workspace_contains_resources(workspace_name: str) -> bool:
     """
-    Return True if the workspace contains experiments, runs, or registry artifacts.
+    Return True if the workspace contains experiments, runs, jobs, webhooks, or registry artifacts.
 
     The default experiment is treated as a real resource when it has runs, so operators cannot
     delete a workspace while legacy resources still exist under the implicit default.
     """
+    try:
+        job_store = _get_job_store()
+    except (ValueError, MlflowException):
+        job_store = None
+
+    if job_store is not None:
+        with workspace_context.WorkspaceContext(workspace_name):
+            try:
+                if next(job_store.list_jobs(), None) is not None:
+                    return True
+            except MlflowException:
+                pass
+
     tracking_store = _get_tracking_store()
     if tracking_store is not None:
         with workspace_context.WorkspaceContext(workspace_name):
@@ -925,8 +938,15 @@ def _workspace_contains_resources(workspace_name: str) -> bool:
                 models = models.to_list() if hasattr(models, "to_list") else models
             except NotImplementedError:
                 models = []
-        if len(models) > 0:
-            return True
+            if len(models) > 0:
+                return True
+
+            try:
+                webhooks = registry_store.list_webhooks(max_results=1)
+            except (NotImplementedError, MlflowException):
+                webhooks = []
+            if len(webhooks) > 0:
+                return True
 
     return False
 

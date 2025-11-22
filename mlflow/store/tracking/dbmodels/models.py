@@ -1996,6 +1996,16 @@ class SqlJob(Base):
     Job parameters: `Text`.
     """
 
+    workspace = Column(
+        String(63),
+        nullable=False,
+        default=DEFAULT_WORKSPACE_NAME,
+        server_default=sa.text(f"'{DEFAULT_WORKSPACE_NAME}'"),
+    )
+    """
+    Workspace identifier for this job: `String` (limit 63 characters). Defaults to ``'default'``.
+    """
+
     timeout = Column(sa.types.Float(precision=53), nullable=True)
     """
     Job execution timeout in seconds: `Float`
@@ -2025,6 +2035,7 @@ class SqlJob(Base):
         PrimaryKeyConstraint("id", name="jobs_pk"),
         Index(
             "index_jobs_function_status_creation_time",
+            "workspace",
             "function_fullname",
             "status",
             "creation_time",
@@ -2054,4 +2065,5 @@ class SqlJob(Base):
             result=self.result,
             retry_count=self.retry_count,
             last_update_time=self.last_update_time,
+            workspace=self.workspace,
         )

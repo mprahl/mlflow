@@ -58,6 +58,7 @@ WORKSPACE_TABLES = {
     "registered_model_aliases",
     "evaluation_datasets",
     "webhooks",
+    "jobs",
 }
 
 

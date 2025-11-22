@@ -58,14 +58,30 @@ def test_create_workspace_handler_creates_default_experiment(monkeypatch):
         def search_experiments(self, **_):
             return list(self._experiments.values())
 
+    class DummyJobStore:
+        def list_jobs(self):
+            return iter([SimpleNamespace()])
+
+    class DummyRegistryStore:
+        def search_registered_models(self, **_):
+            return []
+
+        def list_webhooks(self, max_results=1):
+            return [SimpleNamespace()]
+
     dummy_store = DummyWorkspaceStore()
     dummy_tracking_store = DummyTrackingStore()
+    dummy_job_store = DummyJobStore()
+    dummy_registry_store = DummyRegistryStore()
 
     monkeypatch.setattr(handlers, "_get_workspace_store", lambda *args, **kwargs: dummy_store)
     monkeypatch.setattr(
         handlers, "_get_tracking_store", lambda *args, **kwargs: dummy_tracking_store
     )
-    monkeypatch.setattr(handlers, "_get_model_registry_store", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        handlers, "_get_model_registry_store", lambda *args, **kwargs: dummy_registry_store
+    )
+    monkeypatch.setattr(handlers, "_get_job_store", lambda *args, **kwargs: dummy_job_store)
 
     with app.test_request_context(
         "/mlflow/workspaces", method="POST", json={"name": "team-a", "description": None}
@@ -77,7 +93,18 @@ def test_create_workspace_handler_creates_default_experiment(monkeypatch):
     assert dummy_tracking_store.created_names == [("team-a", Experiment.DEFAULT_EXPERIMENT_NAME)]
 
 
-def test_delete_workspace_handler_rejects_non_empty_workspace(monkeypatch):
+@pytest.mark.parametrize(
+    ("has_experiments", "has_jobs", "has_models", "has_webhooks"),
+    [
+        (True, False, False, False),
+        (False, True, False, False),
+        (False, False, True, False),
+        (False, False, False, True),
+    ],
+)
+def test_delete_workspace_handler_rejects_non_empty_workspace(
+    monkeypatch, has_experiments, has_jobs, has_models, has_webhooks
+):
     monkeypatch.setenv(MLFLOW_ENABLE_WORKSPACES.name, "true")
 
     class DummyWorkspaceStore:
@@ -88,6 +115,9 @@ def test_delete_workspace_handler_rejects_non_empty_workspace(monkeypatch):
             self.deleted = True
 
     class DummyTrackingStore:
+        def __init__(self, has_experiments: bool):
+            self._has_experiments = has_experiments
+
         def get_experiment_by_name(self, name: str):
             return None
 
@@ -95,25 +125,51 @@ def test_delete_workspace_handler_rejects_non_empty_workspace(monkeypatch):
             raise NotImplementedError
 
         def search_experiments(self, view_type=None, max_results=None, **__):
+            if not self._has_experiments:
+                return []
             workspace = workspace_context.get_current_workspace()
             return [
                 SimpleNamespace(name="exp-1", workspace=workspace, experiment_id="1"),
-                SimpleNamespace(
-                    name=Experiment.DEFAULT_EXPERIMENT_NAME, workspace=workspace, experiment_id="0"
-                ),
             ]
 
         def search_runs(self, *_, **__):
             return []
 
+    class DummyJobStore:
+        def __init__(self, has_jobs: bool):
+            self._has_jobs = has_jobs
+
+        def list_jobs(self):
+            if self._has_jobs:
+                return iter([SimpleNamespace()])
+            return iter([])
+
+    class DummyRegistryStore:
+        def __init__(self, has_models: bool, has_webhooks: bool):
+            self._has_models = has_models
+            self._has_webhooks = has_webhooks
+
+        def search_registered_models(self, **_):
+            return [SimpleNamespace()] if self._has_models else []
+
+        def list_webhooks(self, max_results=1):
+            if self._has_webhooks:
+                return [SimpleNamespace()]
+            return []
+
     dummy_store = DummyWorkspaceStore()
-    dummy_tracking_store = DummyTrackingStore()
+    dummy_tracking_store = DummyTrackingStore(has_experiments)
+    dummy_job_store = DummyJobStore(has_jobs)
+    dummy_registry_store = DummyRegistryStore(has_models, has_webhooks)
 
     monkeypatch.setattr(handlers, "_get_workspace_store", lambda *args, **kwargs: dummy_store)
     monkeypatch.setattr(
         handlers, "_get_tracking_store", lambda *args, **kwargs: dummy_tracking_store
     )
-    monkeypatch.setattr(handlers, "_get_model_registry_store", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        handlers, "_get_model_registry_store", lambda *args, **kwargs: dummy_registry_store
+    )
+    monkeypatch.setattr(handlers, "_get_job_store", lambda *_, **__: dummy_job_store)
 
     with app.test_request_context("/mlflow/workspaces/team-a", method="DELETE"):
         response = _delete_workspace_handler("team-a")
