@@ -6,7 +6,11 @@ from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTrace
 
 from mlflow.entities import Workspace
 from mlflow.environment_variables import MLFLOW_ENABLE_WORKSPACES
+from mlflow.exceptions import MlflowException
+from mlflow.protos import databricks_pb2
+from mlflow.server.fastapi_app import add_fastapi_workspace_middleware
 from mlflow.server.otel_api import otel_router
+from mlflow.tracing.utils.otlp import OTLP_TRACES_PATH
 from mlflow.tracking._workspace import context as workspace_context
 from mlflow.utils.workspace_utils import WORKSPACE_HEADER_NAME
 
@@ -22,20 +26,13 @@ def _build_otlp_payload():
 
 def _make_test_client():
     app = FastAPI()
+    add_fastapi_workspace_middleware(app)
     app.include_router(otel_router)
     return TestClient(app)
 
 
 def test_workspace_scoped_otlp_endpoint_sets_workspace(monkeypatch):
     monkeypatch.setenv(MLFLOW_ENABLE_WORKSPACES.name, "true")
-
-    class DummyWorkspaceStore:
-        def __init__(self):
-            self.requested = None
-
-        def get_workspace(self, workspace_name):
-            self.requested = workspace_name
-            return Workspace(name=workspace_name)
 
     class DummyTrackingStore:
         def __init__(self):
@@ -44,12 +41,16 @@ def test_workspace_scoped_otlp_endpoint_sets_workspace(monkeypatch):
         def log_spans(self, experiment_id, spans):
             self.calls.append((workspace_context.get_current_workspace(), experiment_id, spans))
 
-    workspace_store = DummyWorkspaceStore()
     tracking_store = DummyTrackingStore()
+    captured = {}
+
+    def fake_resolve(header_workspace):
+        captured["requested"] = header_workspace
+        return Workspace(name=header_workspace)
 
     monkeypatch.setattr(
-        "mlflow.server.otel_api._get_workspace_store",
-        lambda: workspace_store,
+        "mlflow.server.fastapi_app.resolve_workspace_from_header",
+        fake_resolve,
     )
     monkeypatch.setattr(
         "mlflow.server.otel_api._get_tracking_store",
@@ -58,7 +59,7 @@ def test_workspace_scoped_otlp_endpoint_sets_workspace(monkeypatch):
 
     client = _make_test_client()
     response = client.post(
-        "/v1/traces",
+        OTLP_TRACES_PATH,
         data=_build_otlp_payload(),
         headers={
             "Content-Type": "application/x-protobuf",
@@ -68,7 +69,7 @@ def test_workspace_scoped_otlp_endpoint_sets_workspace(monkeypatch):
     )
 
     assert response.status_code == 200
-    assert workspace_store.requested == "team-a"
+    assert captured["requested"].strip() == "team-a"
     assert tracking_store.calls[0][0] == "team-a"
     # Workspace context should be cleared after the request
     assert workspace_context.get_current_workspace() is None
@@ -77,9 +78,6 @@ def test_workspace_scoped_otlp_endpoint_sets_workspace(monkeypatch):
 def test_default_otlp_endpoint_uses_default_workspace(monkeypatch):
     monkeypatch.setenv(MLFLOW_ENABLE_WORKSPACES.name, "true")
 
-    class DummyWorkspaceStore:
-        pass
-
     class DummyTrackingStore:
         def __init__(self):
             self.calls = []
@@ -87,25 +85,25 @@ def test_default_otlp_endpoint_uses_default_workspace(monkeypatch):
         def log_spans(self, experiment_id, spans):
             self.calls.append((workspace_context.get_current_workspace(), experiment_id, spans))
 
-    workspace_store = DummyWorkspaceStore()
     tracking_store = DummyTrackingStore()
+    captured = {}
+
+    def fake_resolve(header_workspace):
+        captured["requested"] = header_workspace
+        return Workspace(name="default")
 
     monkeypatch.setattr(
-        "mlflow.server.otel_api._get_workspace_store",
-        lambda: workspace_store,
+        "mlflow.server.fastapi_app.resolve_workspace_from_header",
+        fake_resolve,
     )
     monkeypatch.setattr(
         "mlflow.server.otel_api._get_tracking_store",
         lambda: tracking_store,
     )
-    monkeypatch.setattr(
-        "mlflow.server.otel_api.get_default_workspace_optional",
-        lambda store, logger=None: (Workspace(name="default"), True),
-    )
 
     client = _make_test_client()
     response = client.post(
-        "/v1/traces",
+        OTLP_TRACES_PATH,
         data=_build_otlp_payload(),
         headers={
             "Content-Type": "application/x-protobuf",
@@ -114,6 +112,7 @@ def test_default_otlp_endpoint_uses_default_workspace(monkeypatch):
     )
 
     assert response.status_code == 200
+    assert captured["requested"] is None
     assert tracking_store.calls[0][0] == "default"
     assert workspace_context.get_current_workspace() is None
 
@@ -122,23 +121,20 @@ def test_otlp_endpoint_without_default_workspace_raises_error(monkeypatch):
     """Test that missing default workspace raises appropriate error."""
     monkeypatch.setenv(MLFLOW_ENABLE_WORKSPACES.name, "true")
 
-    class DummyWorkspaceStore:
-        pass
-
-    workspace_store = DummyWorkspaceStore()
+    def fake_resolve(_header_workspace):
+        raise MlflowException(
+            "Active workspace is required.",
+            error_code=databricks_pb2.INVALID_PARAMETER_VALUE,
+        )
 
     monkeypatch.setattr(
-        "mlflow.server.otel_api._get_workspace_store",
-        lambda: workspace_store,
-    )
-    monkeypatch.setattr(
-        "mlflow.server.otel_api.get_default_workspace_optional",
-        lambda store, logger=None: (None, False),
+        "mlflow.server.fastapi_app.resolve_workspace_from_header",
+        fake_resolve,
     )
 
     client = _make_test_client()
     response = client.post(
-        "/v1/traces",
+        OTLP_TRACES_PATH,
         data=_build_otlp_payload(),
         headers={
             "Content-Type": "application/x-protobuf",
@@ -147,7 +143,7 @@ def test_otlp_endpoint_without_default_workspace_raises_error(monkeypatch):
     )
 
     assert response.status_code == 400
-    assert "Active workspace is required" in response.json()["detail"]
+    assert "Active workspace is required" in response.json()["message"]
 
 
 def test_otlp_invalid_content_type(monkeypatch):
@@ -163,7 +159,7 @@ def test_otlp_invalid_content_type(monkeypatch):
 
     # Test with wrong content type
     response = client.post(
-        "/v1/traces",
+        OTLP_TRACES_PATH,
         data=_build_otlp_payload(),
         headers={
             "Content-Type": "application/json",
@@ -175,7 +171,7 @@ def test_otlp_invalid_content_type(monkeypatch):
 
     # Test with missing content type
     response = client.post(
-        "/v1/traces",
+        OTLP_TRACES_PATH,
         data=_build_otlp_payload(),
         headers={
             "X-MLflow-Experiment-Id": "42",
@@ -198,7 +194,7 @@ def test_otlp_invalid_protobuf_data(monkeypatch):
 
     # Test with invalid protobuf data
     response = client.post(
-        "/v1/traces",
+        OTLP_TRACES_PATH,
         data=b"this is not valid protobuf data",
         headers={
             "Content-Type": "application/x-protobuf",
@@ -224,7 +220,7 @@ def test_otlp_empty_resource_spans(monkeypatch):
     request = ExportTraceServiceRequest()
 
     response = client.post(
-        "/v1/traces",
+        OTLP_TRACES_PATH,
         data=request.SerializeToString(),
         headers={
             "Content-Type": "application/x-protobuf",
@@ -256,7 +252,7 @@ def test_otlp_conversion_error(monkeypatch):
     client = _make_test_client()
 
     response = client.post(
-        "/v1/traces",
+        OTLP_TRACES_PATH,
         data=_build_otlp_payload(),
         headers={
             "Content-Type": "application/x-protobuf",

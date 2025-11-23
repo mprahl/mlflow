@@ -430,6 +430,13 @@ class SqlAlchemyStore(WorkspaceAwareMixin, AbstractStore):
             session.execute(
                 sql.text(f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({values});")
             )
+        except IntegrityError as exc:
+            session.rollback()
+            _logger.debug(
+                "Default experiment already exists in the single-tenant schema; "
+                "swallowing IntegrityError: %s",
+                exc,
+            )
         finally:
             self._unset_zero_value_insertion_for_autoincrement_column(session)
 

@@ -51,7 +51,8 @@ _RBAC_RESOURCE_PREFIX_MAP = {
     "get-online-trace-details": "experiments",
     "upload-artifact": "experiments",
     "workspaces": "workspaces",
-    "gateway-proxy": "workspaces",
+    "gateway-proxy": "experiments",
+    "jobs": "jobs",
 }
 
 _GRAPHQL_OPERATION_RESOURCE_MAP = {
@@ -115,7 +116,7 @@ def _get_request_payload() -> dict[str, object]:
     return payload if isinstance(payload, dict) else {}
 
 
-def _resolve_rbac_resource_type() -> str | None:
+def _resolve_rbac_resource_type(path: str | None = None) -> str | None:
     """
     Determine the RBAC resource type from the request path.
 
@@ -125,7 +126,8 @@ def _resolve_rbac_resource_type() -> str | None:
         /mlflow/graphql -> determined by GraphQL operation name
     """
 
-    path = _strip_static_prefix_from_path(request.path)
+    path = path or request.path
+    path = _strip_static_prefix_from_path(path)
     segments = _strip_api_and_mlflow_prefixes([segment for segment in path.split("/") if segment])
 
     if not segments:
@@ -148,6 +150,28 @@ def _resolve_rbac_resource_type() -> str | None:
         return resource_type or _DEFAULT_GRAPHQL_RESOURCE
 
     return _RBAC_RESOURCE_PREFIX_MAP.get(base_segment)
+
+
+def resolve_workspace_from_header(header_workspace: str | None) -> Workspace:
+    """
+    Resolve (and validate) the active workspace given an optional header value.
+
+    When ``header_workspace`` is None or empty, the default workspace is used (if configured).
+    """
+    store = _get_workspace_store()
+    header_workspace = header_workspace.strip() if header_workspace else None
+
+    if header_workspace:
+        return store.get_workspace(header_workspace)
+
+    workspace, _ = get_default_workspace_optional(store, logger=_logger)
+    if workspace is None:
+        raise MlflowException(
+            f"Active workspace is required. Set the '{WORKSPACE_HEADER_NAME}' request header "
+            "or configure a default workspace.",
+            error_code=databricks_pb2.INVALID_PARAMETER_VALUE,
+        )
+    return workspace
 
 
 def _get_workspace_store(workspace_uri: str | None = None, tracking_uri: str | None = None):
@@ -270,6 +294,7 @@ __all__ = [
     "STATIC_PREFIX_ENV_VAR",
     "_GRAPHQL_OPERATION_RESOURCE_MAP",
     "_RBAC_RESOURCE_PREFIX_MAP",
+    "resolve_workspace_from_header",
     "_get_workspace_store",
     "_resolve_rbac_resource_type",
     "workspace_before_request_handler",
