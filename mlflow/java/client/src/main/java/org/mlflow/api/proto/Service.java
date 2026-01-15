@@ -261882,22 +261882,22 @@ public final class Service {
       "low/traces/metrics\032\004\010\003\020\000\020\003*\023Query Trace " +
       "Metrics\022\203\001\n\016listWorkspaces\022\026.mlflow.List" +
       "Workspaces\032\037.mlflow.ListWorkspaces.Respo" +
-      "nse\"8\362\206\0314\n\037\n\003GET\022\022/mlflow/workspaces\032\004\010\002" +
+      "nse\"8\362\206\0314\n\037\n\003GET\022\022/mlflow/workspaces\032\004\010\003" +
       "\020\000\020\003*\017List Workspaces\022\210\001\n\017createWorkspac" +
       "e\022\027.mlflow.CreateWorkspace\032 .mlflow.Crea" +
       "teWorkspace.Response\":\362\206\0316\n \n\004POST\022\022/mlf" +
-      "low/workspaces\032\004\010\002\020\000\020\003*\020Create Workspace" +
+      "low/workspaces\032\004\010\003\020\000\020\003*\020Create Workspace" +
       "\022\214\001\n\014getWorkspace\022\024.mlflow.GetWorkspace\032" +
       "\035.mlflow.GetWorkspace.Response\"G\362\206\031C\n0\n\003" +
       "GET\022#/mlflow/workspaces/{workspace_name}" +
-      "\032\004\010\002\020\000\020\003*\rGet Workspace\022\232\001\n\017updateWorksp" +
+      "\032\004\010\003\020\000\020\003*\rGet Workspace\022\232\001\n\017updateWorksp" +
       "ace\022\027.mlflow.UpdateWorkspace\032 .mlflow.Up" +
       "dateWorkspace.Response\"L\362\206\031H\n2\n\005PATCH\022#/" +
-      "mlflow/workspaces/{workspace_name}\032\004\010\002\020\000" +
+      "mlflow/workspaces/{workspace_name}\032\004\010\003\020\000" +
       "\020\003*\020Update Workspace\022\233\001\n\017deleteWorkspace" +
       "\022\027.mlflow.DeleteWorkspace\032 .mlflow.Delet" +
       "eWorkspace.Response\"M\362\206\031I\n3\n\006DELETE\022#/ml" +
-      "flow/workspaces/{workspace_name}\032\004\010\002\020\000\020\003" +
+      "flow/workspaces/{workspace_name}\032\004\010\003\020\000\020\003" +
       "*\020Delete Workspace\022\224\001\n\021createLoggedModel" +
       "\022\031.mlflow.CreateLoggedModel\032\".mlflow.Cre" +
       "ateLoggedModel.Response\"@\362\206\031<\n#\n\004POST\022\025/" +
