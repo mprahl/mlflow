@@ -26,6 +26,7 @@ from mlflow.utils.uri import (
 
 _logger = logging.getLogger(__name__)
 _tracking_uri = None
+_SERVER_ARTIFACT_ROOT_ENV_VAR = "_MLFLOW_SERVER_ARTIFACT_ROOT"
 
 
 def _has_existing_mlruns_data() -> bool:
@@ -187,8 +188,14 @@ def _get_sqlalchemy_store(store_uri, artifact_uri):
     from mlflow.store.tracking.sqlalchemy_store import SqlAlchemyStore
     from mlflow.store.tracking.sqlalchemy_workspace_store import WorkspaceAwareSqlAlchemyStore
 
+    # When running inside the server process (e.g., Model.log() triggered by a job/API),
+    # inherit the server's configured artifact root from the environment rather than
+    # falling back to the local default. This ensures artifacts are stored in the
+    # correct location (e.g., S3) regardless of which code path creates the store.
     if artifact_uri is None:
-        artifact_uri = DEFAULT_LOCAL_FILE_AND_ARTIFACT_PATH
+        artifact_uri = os.environ.get(
+            _SERVER_ARTIFACT_ROOT_ENV_VAR, DEFAULT_LOCAL_FILE_AND_ARTIFACT_PATH
+        )
 
     store_cls = WorkspaceAwareSqlAlchemyStore if MLFLOW_ENABLE_WORKSPACES.get() else SqlAlchemyStore
     return store_cls(store_uri, artifact_uri)
