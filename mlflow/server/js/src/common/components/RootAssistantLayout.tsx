@@ -7,6 +7,8 @@ import { useDesignSystemTheme } from '@databricks/design-system';
 import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { useAssistant } from '../../assistant/AssistantContext';
 import { AssistantChatPanel } from '../../assistant/AssistantChatPanel';
+import { AssistantIconButton } from '../../assistant/AssistantIconButton';
+import { isAssistantEnabled } from '../../assistant/assistantFlags';
 
 const MIN_PANEL_WIDTH = 300;
 const MAX_PANEL_WIDTH_PERCENT = 60;
@@ -14,11 +16,12 @@ const DEFAULT_PANEL_WIDTH_PERCENT = 25;
 
 export const RootAssistantLayout = ({ children }: { children: ReactNode }) => {
   const { theme } = useDesignSystemTheme();
+  const assistantEnabled = isAssistantEnabled();
   const { isPanelOpen } = useAssistant();
   const [panelWidthPercent, setPanelWidthPercent] = useState(DEFAULT_PANEL_WIDTH_PERCENT);
   const isDraggingRef = useRef(false);
 
-  const showPanel = isPanelOpen;
+  const showPanel = assistantEnabled && isPanelOpen;
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -96,6 +99,7 @@ export const RootAssistantLayout = ({ children }: { children: ReactNode }) => {
           </div>
         )}
       </div>
+      {assistantEnabled && !isPanelOpen && <AssistantIconButton />}
     </>
   );
 };
