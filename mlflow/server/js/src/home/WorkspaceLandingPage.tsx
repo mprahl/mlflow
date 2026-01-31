@@ -4,7 +4,7 @@ import { FormattedMessage } from 'react-intl';
 import { ScrollablePageWrapper } from '../common/components/ScrollablePageWrapper';
 import { useCreateWorkspaceModal } from './components/CreateWorkspaceModal';
 import { useNavigate } from '../common/utils/RoutingUtils';
-import { setActiveWorkspace } from '../common/utils/WorkspaceUtils';
+import { setActiveWorkspace, WORKSPACE_QUERY_PARAM } from '../common/utils/WorkspaceUtils';
 
 // Loaders and lazy imports for expensive components
 import LogTracesDrawerLoader from './components/LogTracesDrawerLoader';
@@ -18,9 +18,9 @@ const WorkspaceLandingPage = () => {
 
   const { CreateWorkspaceModal, openModal } = useCreateWorkspaceModal({
     onSuccess: (workspaceName: string) => {
-      // Set the newly created workspace as active and navigate to it
+      // Set the newly created workspace as active and navigate to home with workspace query param
       setActiveWorkspace(workspaceName);
-      navigate(`/workspaces/${encodeURIComponent(workspaceName)}`);
+      navigate(`/?${WORKSPACE_QUERY_PARAM}=${encodeURIComponent(workspaceName)}`);
     },
   });
 

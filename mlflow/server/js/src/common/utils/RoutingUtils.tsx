@@ -40,7 +40,8 @@ import { HashRouter as HashRouterV5, Link as LinkV5, NavLink as NavLinkV5 } from
 import type { ComponentProps } from 'react';
 import React, { useCallback } from 'react';
 
-import { prefixPathnameWithWorkspace, prefixRouteWithWorkspace } from './WorkspaceUtils';
+import { prefixRouteWithWorkspace, getActiveWorkspace, isGlobalRoute, WORKSPACE_QUERY_PARAM } from './WorkspaceUtils';
+import { getWorkspacesEnabledSync } from './ServerFeaturesContext';
 
 const useLocation = useLocationDirect;
 
@@ -73,19 +74,57 @@ const useMatches = useMatchesDirect;
 
 const Outlet = OutletDirect;
 
+/**
+ * Add workspace query param to a To object (used by Link/NavLink/navigate).
+ * Handles both string and object forms of To.
+ */
 const prefixRouteWithWorkspaceForTo = (to: To): To => {
+  // String form - delegate to prefixRouteWithWorkspace
   if (typeof to === 'string') {
     return prefixRouteWithWorkspace(to);
   }
+
+  // Object form - need to handle pathname and search separately
   if (typeof to === 'object' && to !== null) {
     const pathname = 'pathname' in to ? to.pathname : undefined;
-    if (typeof pathname === 'string') {
-      return {
-        ...to,
-        pathname: prefixPathnameWithWorkspace(pathname),
-      };
+
+    // Skip if workspaces not enabled or pathname not provided
+    if (!getWorkspacesEnabledSync() || typeof pathname !== 'string') {
+      return to;
     }
+
+    // Skip workspace param for global routes
+    if (isGlobalRoute(pathname)) {
+      // Remove workspace param if present in existing search
+      if (to.search) {
+        const params = new URLSearchParams(to.search);
+        params.delete(WORKSPACE_QUERY_PARAM);
+        const newSearch = params.toString();
+        return {
+          ...to,
+          search: newSearch ? `?${newSearch}` : undefined,
+        };
+      }
+      return to;
+    }
+
+    // Add workspace query param
+    const workspace = getActiveWorkspace();
+    if (!workspace) {
+      return to;
+    }
+
+    // Merge workspace into existing search params
+    const existingSearch = to.search || '';
+    const params = new URLSearchParams(existingSearch.startsWith('?') ? existingSearch.slice(1) : existingSearch);
+    params.set(WORKSPACE_QUERY_PARAM, workspace);
+
+    return {
+      ...to,
+      search: `?${params.toString()}`,
+    };
   }
+
   return to;
 };
 

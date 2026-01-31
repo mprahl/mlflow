@@ -16,7 +16,8 @@ const getWorkspacesEnabledSyncMock = jest.mocked(getWorkspacesEnabledSync);
 const TEST_WORKSPACE = 'test-workspace';
 
 describe('ErrorView', () => {
-  const workspacePrefixed = (path: string) => `/workspaces/${TEST_WORKSPACE}${path}`;
+  // With query param routing, workspace is added as a query param
+  const workspacePrefixed = (path: string) => `${path}?workspace=${TEST_WORKSPACE}`;
 
   beforeAll(() => {
     getWorkspacesEnabledSyncMock.mockReturnValue(true);

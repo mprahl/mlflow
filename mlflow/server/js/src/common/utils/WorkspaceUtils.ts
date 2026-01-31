@@ -1,6 +1,7 @@
 import { getWorkspacesEnabledSync } from './ServerFeaturesContext';
 
 const WORKSPACE_STORAGE_KEY = 'mlflow.activeWorkspace';
+export const WORKSPACE_QUERY_PARAM = 'workspace';
 
 const getStoredWorkspace = () => {
   if (typeof window === 'undefined') {
@@ -16,6 +17,7 @@ const getStoredWorkspace = () => {
 let activeWorkspace: string | null = getStoredWorkspace();
 let availableWorkspaces: string[] = [];
 
+// Legacy path prefix - kept for backwards compatibility during migration
 const WORKSPACE_PREFIX = '/workspaces/';
 
 const listeners = new Set<(workspace: string | null) => void>();
@@ -85,6 +87,31 @@ export const validateWorkspaceName = (name: string): WorkspaceValidationResult =
   return { valid: true };
 };
 
+/**
+ * Extract workspace from URL search params (query string).
+ * This is the primary method for workspace extraction.
+ */
+export const extractWorkspaceFromSearchParams = (search: string | URLSearchParams): string | null => {
+  const params = typeof search === 'string' ? new URLSearchParams(search) : search;
+  const workspaceName = params.get(WORKSPACE_QUERY_PARAM);
+
+  if (!workspaceName) {
+    return null;
+  }
+
+  // Validate workspace name format
+  if (!WORKSPACE_NAME_PATTERN.test(workspaceName)) {
+    return null;
+  }
+
+  return workspaceName;
+};
+
+/**
+ * @deprecated Use extractWorkspaceFromSearchParams instead.
+ * Extract workspace from pathname (legacy path-based routing).
+ * Kept for backwards compatibility during migration.
+ */
 export const extractWorkspaceFromPathname = (pathname: string): string | null => {
   if (!pathname || !pathname.startsWith(WORKSPACE_PREFIX)) {
     return null;
@@ -127,34 +154,101 @@ export const getAvailableWorkspaces = () => availableWorkspaces;
 const isAbsoluteUrl = (value: string) => /^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(value);
 
 /**
- * Helper to build a workspace path segment: /workspaces/{encoded-workspace-name}
+ * Global routes that should never have a workspace query param.
+ * These are workspace-agnostic pages.
+ * Note: '/' is special - it's the workspace selector without a workspace param,
+ * but the workspace home page with a workspace param. Other routes listed here
+ * are always global regardless of workspace param.
  */
-const buildWorkspacePath = (workspace: string) => `/workspaces/${encodeURIComponent(workspace)}`;
+const ALWAYS_GLOBAL_ROUTES = ['/settings'];
 
 /**
- * Core logic to prefix a normalized pathname with the active workspace.
- * Returns the pathname unchanged if already a workspace path or no workspace is active.
+ * Check if a pathname is a global route that shouldn't have workspace context.
+ * Note: This returns true for paths that are ALWAYS global (like /settings).
+ * The root path '/' is NOT included here because it's contextual:
+ * - '/' without workspace param = workspace selector (global)
+ * - '/' with workspace param = workspace home page (workspace-scoped)
  */
-const applyWorkspacePrefix = (pathname: string): string => {
-  // Don't prefix if already a workspace path or navigating to the workspace landing page
-  if (pathname.startsWith('/workspaces/') || pathname === '/workspaces') {
-    return pathname;
-  }
-
-  const workspace = getActiveWorkspace();
-  if (!workspace) {
-    return pathname;
-  }
-
-  // Root path becomes just the workspace path
-  if (pathname === '/' || pathname === '') {
-    return buildWorkspacePath(workspace);
-  }
-
-  return `${buildWorkspacePath(workspace)}${pathname}`;
+export const isGlobalRoute = (pathname: string): boolean => {
+  const normalizedPath = pathname.split('?')[0].split('#')[0];
+  return ALWAYS_GLOBAL_ROUTES.some((route) => normalizedPath === route || normalizedPath.startsWith(route + '/'));
 };
 
-export const prefixRouteWithWorkspace = (to: string) => {
+/**
+ * Add workspace query param to a URL string.
+ * Preserves existing query params and hash fragments.
+ */
+const addWorkspaceQueryParam = (url: string, workspace: string): string => {
+  // Handle hash prefix (e.g., "#/experiments")
+  const hashPrefix = url.startsWith('#') ? '#' : '';
+  const urlWithoutHashPrefix = hashPrefix ? url.slice(1) : url;
+
+  // Parse the URL parts
+  let pathname = urlWithoutHashPrefix;
+  let existingQuery = '';
+  let hashFragment = '';
+
+  // Extract hash fragment first
+  const hashIndex = pathname.indexOf('#');
+  if (hashIndex >= 0) {
+    hashFragment = pathname.slice(hashIndex);
+    pathname = pathname.slice(0, hashIndex);
+  }
+
+  // Extract existing query string
+  const queryIndex = pathname.indexOf('?');
+  if (queryIndex >= 0) {
+    existingQuery = pathname.slice(queryIndex + 1);
+    pathname = pathname.slice(0, queryIndex);
+  }
+
+  // Parse existing params and add/update workspace
+  const params = new URLSearchParams(existingQuery);
+  params.set(WORKSPACE_QUERY_PARAM, workspace);
+
+  return `${hashPrefix}${pathname}?${params.toString()}${hashFragment}`;
+};
+
+/**
+ * Remove workspace query param from a URL string.
+ */
+export const removeWorkspaceQueryParam = (url: string): string => {
+  const hashPrefix = url.startsWith('#') ? '#' : '';
+  const urlWithoutHashPrefix = hashPrefix ? url.slice(1) : url;
+
+  let pathname = urlWithoutHashPrefix;
+  let existingQuery = '';
+  let hashFragment = '';
+
+  const hashIndex = pathname.indexOf('#');
+  if (hashIndex >= 0) {
+    hashFragment = pathname.slice(hashIndex);
+    pathname = pathname.slice(0, hashIndex);
+  }
+
+  const queryIndex = pathname.indexOf('?');
+  if (queryIndex >= 0) {
+    existingQuery = pathname.slice(queryIndex + 1);
+    pathname = pathname.slice(0, queryIndex);
+  }
+
+  const params = new URLSearchParams(existingQuery);
+  params.delete(WORKSPACE_QUERY_PARAM);
+
+  const queryString = params.toString();
+  return `${hashPrefix}${pathname}${queryString ? '?' + queryString : ''}${hashFragment}`;
+};
+
+/**
+ * Prefix a route with workspace query param.
+ * For global routes, removes any existing workspace param.
+ * Relative paths (not starting with / or #) are returned unchanged.
+ *
+ * Special handling for root path '/':
+ * - '/' without workspace param -> workspace selector (no workspace added)
+ * - '/?workspace=foo' with explicit workspace -> preserve as workspace home page
+ */
+export const prefixRouteWithWorkspace = (to: string): string => {
   if (typeof to !== 'string' || to.length === 0) {
     return to;
   }
@@ -163,59 +257,78 @@ export const prefixRouteWithWorkspace = (to: string) => {
     return to;
   }
 
-  const prefix = to.startsWith('#') ? '#' : '';
-  const valueWithoutPrefix = prefix ? to.slice(1) : to;
+  // Extract pathname for checks
+  const hashPrefix = to.startsWith('#') ? '#' : '';
+  const urlWithoutHashPrefix = hashPrefix ? to.slice(1) : to;
 
-  const isAbsoluteNavigation = prefix !== '' || valueWithoutPrefix.startsWith('/');
+  // Skip relative navigation (paths not starting with /)
+  // These are relative to current location and shouldn't have workspace added
+  const isAbsoluteNavigation = hashPrefix !== '' || urlWithoutHashPrefix.startsWith('/');
   if (!isAbsoluteNavigation) {
     return to;
   }
 
-  if (!valueWithoutPrefix) {
-    const workspace = getActiveWorkspace();
-    if (!workspace) {
-      return to;
-    }
-    return `${prefix}${buildWorkspacePath(workspace)}`;
-  }
-
-  // Separate hash fragment (if any)
-  let pathWithQuery = valueWithoutPrefix;
-  let hashFragment = '';
-  const hashIndex = pathWithQuery.indexOf('#');
+  let pathname = urlWithoutHashPrefix;
+  let existingQuery = '';
+  const hashIndex = pathname.indexOf('#');
   if (hashIndex >= 0) {
-    hashFragment = pathWithQuery.slice(hashIndex);
-    pathWithQuery = pathWithQuery.slice(0, hashIndex);
+    pathname = pathname.slice(0, hashIndex);
   }
-
-  // Separate query string (if any)
-  let queryString = '';
-  const queryIndex = pathWithQuery.indexOf('?');
+  const queryIndex = pathname.indexOf('?');
   if (queryIndex >= 0) {
-    queryString = pathWithQuery.slice(queryIndex);
-    pathWithQuery = pathWithQuery.slice(0, queryIndex);
+    existingQuery = pathname.slice(queryIndex + 1);
+    pathname = pathname.slice(0, queryIndex);
   }
 
-  // Inline sanitize: ensure path starts with /
-  const normalizedPath = pathWithQuery ? (pathWithQuery.startsWith('/') ? pathWithQuery : `/${pathWithQuery}`) : '';
+  // Check if URL already has a workspace param
+  const existingParams = new URLSearchParams(existingQuery);
+  const hasExplicitWorkspace = existingParams.has(WORKSPACE_QUERY_PARAM);
 
-  // Apply workspace prefix to the normalized path
-  const finalPath = applyWorkspacePrefix(normalizedPath);
+  // For always-global routes (like /settings), strip workspace param
+  if (isGlobalRoute(pathname || '/')) {
+    return removeWorkspaceQueryParam(to);
+  }
 
-  return `${prefix}${finalPath}${queryString}${hashFragment}`;
+  // If URL already has explicit workspace param, preserve it as-is
+  // This handles explicit workspace navigation like `/?workspace=foo`
+  if (hasExplicitWorkspace) {
+    return to;
+  }
+
+  // For workspace-scoped routes (including root '/'), add workspace param if there's an active workspace
+  // Root '/' with workspace param = workspace home page
+  // Root '/' without workspace param (and no active workspace) = workspace selector
+  const workspace = getActiveWorkspace();
+  if (!workspace) {
+    return to;
+  }
+
+  return addWorkspaceQueryParam(to, workspace);
 };
 
-export const prefixPathnameWithWorkspace = (pathname: string | undefined) => {
+/**
+ * Prefix a pathname with workspace query param.
+ * Similar to prefixRouteWithWorkspace but for pathname-only values.
+ */
+export const prefixPathnameWithWorkspace = (pathname: string | undefined): string | undefined => {
   if (!pathname) {
-    const workspace = getActiveWorkspace();
-    return workspace ? buildWorkspacePath(workspace) : pathname;
-  }
-  if (!getWorkspacesEnabledSync() || isAbsoluteUrl(pathname) || !pathname.startsWith('/')) {
     return pathname;
   }
-  // Inline sanitize: ensure path starts with /
-  const sanitized = pathname.startsWith('/') ? pathname : `/${pathname}`;
+  if (!getWorkspacesEnabledSync() || isAbsoluteUrl(pathname)) {
+    return pathname;
+  }
 
-  // Apply workspace prefix using shared logic
-  return applyWorkspacePrefix(sanitized);
+  // For always-global routes (like /settings), return as-is (no workspace)
+  if (isGlobalRoute(pathname)) {
+    return pathname;
+  }
+
+  // For all other routes (including root '/'), add workspace param if there's an active workspace
+  const workspace = getActiveWorkspace();
+  if (!workspace) {
+    return pathname;
+  }
+
+  // Add workspace query param
+  return `${pathname}?${WORKSPACE_QUERY_PARAM}=${encodeURIComponent(workspace)}`;
 };

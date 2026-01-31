@@ -27,8 +27,13 @@ import { useInitializeExperimentRunColors } from './experiment-tracking/componen
 import { MlflowSidebar } from './common/components/MlflowSidebar';
 import { AssistantProvider, AssistantRouteContextProvider } from './assistant';
 import { RootAssistantLayout } from './common/components/RootAssistantLayout';
-import { extractWorkspaceFromPathname, setActiveWorkspace, getActiveWorkspace } from './common/utils/WorkspaceUtils';
-import { prefixRoutePathWithWorkspace } from './common/utils/WorkspaceRouteUtils';
+import {
+  extractWorkspaceFromSearchParams,
+  setActiveWorkspace,
+  getActiveWorkspace,
+  isGlobalRoute,
+  WORKSPACE_QUERY_PARAM,
+} from './common/utils/WorkspaceUtils';
 import { useWorkspaces } from './common/hooks/useWorkspaces';
 
 type MlflowRouteDef = {
@@ -107,6 +112,8 @@ const MlflowRootRoute = () => {
 const WorkspaceRouterSync = ({ workspacesEnabled }: { workspacesEnabled: boolean }) => {
   const location = useLocation();
   const navigate = useNavigate({ bypassWorkspacePrefix: true });
+  // Note: We fetch workspaces for validation but don't block on it
+  // The workspace list might be stale, so we trust the URL workspace param
   const { workspaces, isLoading } = useWorkspaces(workspacesEnabled);
 
   useEffect(() => {
@@ -115,35 +122,37 @@ const WorkspaceRouterSync = ({ workspacesEnabled }: { workspacesEnabled: boolean
       return;
     }
 
-    const workspaceFromPath = extractWorkspaceFromPathname(location.pathname);
+    // Extract workspace from query param
+    const workspaceFromQuery = extractWorkspaceFromSearchParams(location.search);
     const activeWorkspace = getActiveWorkspace();
-
-    if (isLoading) {
-      return;
-    }
-
-    // Validate workspace from path
-    if (workspaceFromPath) {
-      const isValid = workspaces.some((w) => w.name === workspaceFromPath);
-      if (!isValid) {
-        setActiveWorkspace(null);
-        navigate('/', { replace: true });
-        return;
-      }
-      if (activeWorkspace !== workspaceFromPath) {
-        setActiveWorkspace(workspaceFromPath);
-      }
-      return;
-    }
-
-    // If not in a workspace path and not on root, redirect to selector
     const isRootPath = location.pathname === '/' || location.pathname === '';
-    if (!isRootPath) {
-      setActiveWorkspace(null);
-      navigate('/', { replace: true });
+
+    // If workspace is in query param, sync it to active workspace state
+    // We trust the URL workspace param - if it's invalid, API calls will fail
+    // and the user will see appropriate errors. Don't validate against a
+    // potentially stale workspace list from cache.
+    if (workspaceFromQuery) {
+      if (activeWorkspace !== workspaceFromQuery) {
+        setActiveWorkspace(workspaceFromQuery);
+      }
       return;
     }
-  }, [location, navigate, workspacesEnabled, workspaces, isLoading]);
+
+    // No workspace query param - check if this is a global route
+    const isOnGlobalRoute = isRootPath || isGlobalRoute(location.pathname);
+
+    if (isOnGlobalRoute) {
+      // Clear active workspace on global routes (workspace selector, settings)
+      if (activeWorkspace) {
+        setActiveWorkspace(null);
+      }
+      return;
+    }
+
+    // No workspace query param on a workspace-scoped route - redirect to selector (Option 2)
+    setActiveWorkspace(null);
+    navigate('/', { replace: true });
+  }, [location, navigate, workspacesEnabled]);
 
   return null;
 };
@@ -155,24 +164,10 @@ const WorkspaceAwareRootRoute = ({ workspacesEnabled }: { workspacesEnabled: boo
   </>
 );
 
-const prependWorkspaceToRoutes = (routeDefs: MlflowRouteDef[], isChild = false): MlflowRouteDef[] =>
-  routeDefs.map((route) => {
-    // Only prepend workspace to child routes if they're absolute paths starting with /
-    // Otherwise keep them relative to preserve React Router's nested routing
-    const shouldPrependToPath = !isChild || (route.path && route.path.startsWith('/'));
-    const children = route.children ? prependWorkspaceToRoutes(route.children, true) : undefined;
-
-    return {
-      ...route,
-      path: shouldPrependToPath ? prefixRoutePathWithWorkspace(route.path) : route.path,
-      ...(children ? { children } : {}),
-    };
-  });
-
 export const MlflowRouter = () => {
   const { workspacesEnabled, loading: featuresLoading } = useWorkspacesEnabled();
 
-  // eslint-disable-next-line react-hooks/rules-of-hooks
+  // Routes are the same regardless of workspace mode - workspace context comes from query param
   const routes = useMemo<MlflowRouteDef[]>(
     () => [
       ...getExperimentTrackingRouteDefs(),
@@ -183,16 +178,6 @@ export const MlflowRouter = () => {
     [],
   );
 
-  const workspaceRoutes = useMemo(
-    () => (workspacesEnabled ? prependWorkspaceToRoutes(routes) : []),
-    [routes, workspacesEnabled],
-  );
-  const combinedRoutes = useMemo(
-    () => (workspacesEnabled ? [...routes, ...workspaceRoutes] : routes),
-    [routes, workspaceRoutes, workspacesEnabled],
-  );
-
-  // eslint-disable-next-line react-hooks/rules-of-hooks
   const hashRouter = useMemo(
     () =>
       // Don't create router while still loading features
@@ -202,10 +187,10 @@ export const MlflowRouter = () => {
             {
               path: '/',
               element: <WorkspaceAwareRootRoute workspacesEnabled={workspacesEnabled} />,
-              children: combinedRoutes,
+              children: routes,
             },
           ]),
-    [combinedRoutes, workspacesEnabled, featuresLoading],
+    [routes, workspacesEnabled, featuresLoading],
   );
 
   // Show loading skeleton while determining if workspaces are enabled

@@ -1,23 +1,23 @@
 import React from 'react';
-import { useLocation } from '../common/utils/RoutingUtils';
+import { useSearchParams } from '../common/utils/RoutingUtils';
 import { shouldEnableWorkspaces } from '../common/utils/FeatureUtils';
-import { extractWorkspaceFromPathname } from '../common/utils/WorkspaceUtils';
+import { extractWorkspaceFromSearchParams } from '../common/utils/WorkspaceUtils';
 
 const WorkspaceLandingPage = React.lazy(() => import('./WorkspaceLandingPage'));
 const HomePage = React.lazy(() => import('./HomePage'));
 
 /**
- * Root page component that conditionally renders based on workspace mode and path.
+ * Root page component that conditionally renders based on workspace mode and query param.
  *
  * When workspaces are enabled:
- * - / (root) → WorkspaceLandingPage (workspace selector)
- * - /workspaces/:workspaceName → HomePage (workspace home)
+ * - /?workspace=<name> → HomePage (workspace home)
+ * - / (no workspace param) → WorkspaceLandingPage (workspace selector)
  *
  * When workspaces are disabled:
  * - / → HomePage
  */
 export const RootPage = () => {
-  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const workspacesEnabled = shouldEnableWorkspaces();
 
   // If not in workspace mode, always show HomePage
@@ -25,15 +25,15 @@ export const RootPage = () => {
     return <HomePage />;
   }
 
-  // Check if we're inside a workspace context (e.g., /workspaces/default)
-  const workspaceFromPath = extractWorkspaceFromPathname(location.pathname);
+  // Check if we're inside a workspace context via query param
+  const workspaceFromQuery = extractWorkspaceFromSearchParams(searchParams);
 
   // If inside a workspace, show the workspace's home page
-  if (workspaceFromPath) {
+  if (workspaceFromQuery) {
     return <HomePage />;
   }
 
-  // Otherwise (at root /), show the workspace landing page (selector)
+  // Otherwise (no workspace param), show the workspace landing page (selector)
   return <WorkspaceLandingPage />;
 };
 

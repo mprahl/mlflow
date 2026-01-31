@@ -18,7 +18,7 @@ import {
   ChevronLeftIcon,
 } from '@databricks/design-system';
 import type { Location } from '../utils/RoutingUtils';
-import { Link, matchPath, useLocation, useNavigate } from '../utils/RoutingUtils';
+import { Link, matchPath, useLocation, useNavigate, useSearchParams } from '../utils/RoutingUtils';
 import ExperimentTrackingRoutes from '../../experiment-tracking/routes';
 import { ModelRegistryRoutes } from '../../model-registry/routes';
 import GatewayRoutes from '../../gateway/routes';
@@ -36,28 +36,22 @@ import { useLogTelemetryEvent } from '../../telemetry/hooks/useLogTelemetryEvent
 import { useAssistant } from '../../assistant';
 import { AssistantSparkleIcon } from '../../assistant/AssistantIconButton';
 import { shouldEnableWorkspaces } from '../utils/FeatureUtils';
-import { extractWorkspaceFromPathname } from '../utils/WorkspaceUtils';
+import { extractWorkspaceFromSearchParams } from '../utils/WorkspaceUtils';
 
-const isHomeActive = (location: Location) =>
-  matchPath({ path: '/', end: true }, location.pathname) ||
-  matchPath({ path: '/workspaces/:workspaceName', end: true }, location.pathname);
-const isWorkspacesActive = (location: Location) => matchPath('/workspaces', location.pathname);
+// With query param-based workspace routing, paths no longer contain workspace prefix
+const isHomeActive = (location: Location) => matchPath({ path: '/', end: true }, location.pathname);
+const isWorkspacesActive = (location: Location) =>
+  matchPath({ path: '/', end: true }, location.pathname) && !location.search.includes('workspace=');
 const isExperimentsActive = (location: Location) =>
-  matchPath('/experiments/*', location.pathname) ||
-  matchPath('/workspaces/:workspaceName/experiments/*', location.pathname) ||
-  matchPath('/compare-experiments/*', location.pathname) ||
-  matchPath('/workspaces/:workspaceName/compare-experiments/*', location.pathname);
-const isModelsActive = (location: Location) =>
-  matchPath('/models/*', location.pathname) || matchPath('/workspaces/:workspaceName/models/*', location.pathname);
-const isPromptsActive = (location: Location) =>
-  matchPath('/prompts/*', location.pathname) || matchPath('/workspaces/:workspaceName/prompts/*', location.pathname);
-const isGatewayActive = (location: Location) =>
-  matchPath('/gateway/*', location.pathname) || matchPath('/workspaces/:workspaceName/gateway/*', location.pathname);
-const isSettingsActive = (location: Location) =>
-  matchPath('/settings/*', location.pathname) || matchPath('/workspaces/:workspaceName/settings/*', location.pathname);
+  matchPath('/experiments/*', location.pathname) || matchPath('/compare-experiments/*', location.pathname);
+const isModelsActive = (location: Location) => matchPath('/models/*', location.pathname);
+const isPromptsActive = (location: Location) => matchPath('/prompts/*', location.pathname);
+const isGatewayActive = (location: Location) => matchPath('/gateway/*', location.pathname);
+const isSettingsActive = (location: Location) => matchPath('/settings/*', location.pathname);
 
 export function MlflowSidebar() {
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { theme } = useDesignSystemTheme();
   const invalidateExperimentList = useInvalidateExperimentList();
   const navigate = useNavigate();
@@ -191,8 +185,13 @@ export function MlflowSidebar() {
 
   const logTelemetryEvent = useLogTelemetryEvent();
 
-  const workspaceFromUrl = extractWorkspaceFromPathname(location.pathname);
+  // Extract workspace from query param
+  const workspaceFromUrl = extractWorkspaceFromSearchParams(searchParams);
   const showWorkspaceSection = workspacesEnabled;
+  // Only show creation buttons when: workspaces are disabled OR a workspace is selected
+  const showCreationButtons = !workspacesEnabled || workspaceFromUrl !== null;
+  // Only show workspace-specific menu items when: workspaces are disabled OR a workspace is selected
+  const showWorkspaceMenuItems = !workspacesEnabled || workspaceFromUrl !== null;
 
   return (
     <aside
@@ -205,31 +204,33 @@ export function MlflowSidebar() {
         gap: theme.spacing.md,
       }}
     >
-      <DropdownMenu.Root modal={false}>
-        <DropdownMenu.Trigger asChild>
-          <Button componentId="mlflow.sidebar.new_button" icon={<PlusIcon />}>
-            <FormattedMessage
-              defaultMessage="New"
-              description="Sidebar create popover button to create new experiment, model or prompt"
-            />
-          </Button>
-        </DropdownMenu.Trigger>
+      {showCreationButtons && (
+        <DropdownMenu.Root modal={false}>
+          <DropdownMenu.Trigger asChild>
+            <Button componentId="mlflow.sidebar.new_button" icon={<PlusIcon />}>
+              <FormattedMessage
+                defaultMessage="New"
+                description="Sidebar create popover button to create new experiment, model or prompt"
+              />
+            </Button>
+          </DropdownMenu.Trigger>
 
-        <DropdownMenu.Content side="right" sideOffset={theme.spacing.sm} align="start">
-          {menuItems
-            .filter((item) => item.dropdownProps !== undefined)
-            .map(({ key, icon, dropdownProps }) => (
-              <DropdownMenu.Item
-                key={key}
-                componentId={dropdownProps.componentId satisfies MlFlowSidebarMenuDropdownComponentId}
-                onClick={dropdownProps.onClick}
-              >
-                <DropdownMenu.IconWrapper>{icon}</DropdownMenu.IconWrapper>
-                {dropdownProps.children}
-              </DropdownMenu.Item>
-            ))}
-        </DropdownMenu.Content>
-      </DropdownMenu.Root>
+          <DropdownMenu.Content side="right" sideOffset={theme.spacing.sm} align="start">
+            {menuItems
+              .filter((item) => item.dropdownProps !== undefined)
+              .map(({ key, icon, dropdownProps }) => (
+                <DropdownMenu.Item
+                  key={key}
+                  componentId={dropdownProps.componentId satisfies MlFlowSidebarMenuDropdownComponentId}
+                  onClick={dropdownProps.onClick}
+                >
+                  <DropdownMenu.IconWrapper>{icon}</DropdownMenu.IconWrapper>
+                  {dropdownProps.children}
+                </DropdownMenu.Item>
+              ))}
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
+      )}
 
       <nav css={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '100%' }}>
         <ul
@@ -244,7 +245,7 @@ export function MlflowSidebar() {
               <Link
                 disableWorkspacePrefix
                 to={Routes.rootRoute}
-                aria-current={!workspaceFromUrl ? 'page' : undefined}
+                aria-current={!workspaceFromUrl && !isSettingsActive(location) ? 'page' : undefined}
                 css={{
                   display: 'flex',
                   alignItems: 'center',
@@ -277,7 +278,7 @@ export function MlflowSidebar() {
               </Link>
             </div>
           )}
-          {(workspaceFromUrl || !workspacesEnabled) && (
+          {showWorkspaceMenuItems && (
             <>
               {menuItems.map(({ key, icon, linkProps, componentId }) => (
                 <li key={key}>
@@ -365,6 +366,7 @@ export function MlflowSidebar() {
             </div>
           )}
           <Link
+            disableWorkspacePrefix
             to={ExperimentTrackingRoutes.settingsPageRoute}
             aria-current={isSettingsActive(location) ? 'page' : undefined}
             css={{
@@ -372,8 +374,7 @@ export function MlflowSidebar() {
               alignItems: 'center',
               gap: theme.spacing.sm,
               color: theme.colors.textPrimary,
-              paddingInline: theme.spacing.md,
-              paddingBlock: theme.spacing.sm,
+              padding: `${theme.spacing.xs}px ${theme.spacing.sm}px`,
               borderRadius: theme.borders.borderRadiusSm,
               '&:hover': {
                 color: theme.colors.actionLinkHover,

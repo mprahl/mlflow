@@ -9,7 +9,7 @@ import { DesignSystemProvider } from '@databricks/design-system';
 import { WorkspaceSelector } from './WorkspaceSelector';
 import { shouldEnableWorkspaces } from '../utils/FeatureUtils';
 import { setActiveWorkspace } from '../utils/WorkspaceUtils';
-import { MemoryRouter, useNavigate, useLocation } from '../utils/RoutingUtils';
+import { MemoryRouter, useNavigate, useLocation, useSearchParams } from '../utils/RoutingUtils';
 import { fetchAPI } from '../utils/FetchUtils';
 
 jest.mock('../utils/FeatureUtils', () => ({
@@ -20,6 +20,7 @@ jest.mock('../utils/RoutingUtils', () => ({
   ...jest.requireActual<typeof import('../utils/RoutingUtils')>('../utils/RoutingUtils'),
   useNavigate: jest.fn(),
   useLocation: jest.fn(),
+  useSearchParams: jest.fn(),
 }));
 
 jest.mock('../utils/FetchUtils', () => ({
@@ -30,6 +31,7 @@ jest.mock('../utils/FetchUtils', () => ({
 const shouldEnableWorkspacesMock = jest.mocked(shouldEnableWorkspaces);
 const useNavigateMock = jest.mocked(useNavigate);
 const useLocationMock = jest.mocked(useLocation);
+const useSearchParamsMock = jest.mocked(useSearchParams);
 const fetchAPIMock = jest.mocked(fetchAPI);
 
 describe('WorkspaceSelector', () => {
@@ -40,12 +42,14 @@ describe('WorkspaceSelector', () => {
     shouldEnableWorkspacesMock.mockReturnValue(true);
     useNavigateMock.mockReturnValue(mockNavigate);
     useLocationMock.mockReturnValue({
-      pathname: '/workspaces/default/experiments',
-      search: '',
+      pathname: '/experiments',
+      search: '?workspace=default',
       hash: '',
       state: null,
       key: 'default',
     });
+    // Mock useSearchParams to return URLSearchParams with workspace=default
+    useSearchParamsMock.mockReturnValue([new URLSearchParams('workspace=default'), jest.fn()]);
     setActiveWorkspace('default');
   });
 
@@ -61,7 +65,7 @@ describe('WorkspaceSelector', () => {
     return render(
       <QueryClientProvider client={queryClient}>
         <DesignSystemProvider>
-          <MemoryRouter initialEntries={['/workspaces/default/experiments']}>{component}</MemoryRouter>
+          <MemoryRouter initialEntries={['/experiments?workspace=default']}>{component}</MemoryRouter>
         </DesignSystemProvider>
       </QueryClientProvider>,
     );
@@ -196,8 +200,8 @@ describe('WorkspaceSelector', () => {
 
     // Test with /models path
     useLocationMock.mockReturnValue({
-      pathname: '/workspaces/default/models',
-      search: '',
+      pathname: '/models',
+      search: '?workspace=default',
       hash: '',
       state: null,
       key: 'default',
@@ -257,12 +261,13 @@ describe('WorkspaceSelector', () => {
     // Set active workspace to one that won't be in the list
     setActiveWorkspace('removed-workspace');
     useLocationMock.mockReturnValue({
-      pathname: '/workspaces/removed-workspace/experiments',
-      search: '',
+      pathname: '/experiments',
+      search: '?workspace=removed-workspace',
       hash: '',
       state: null,
       key: 'default',
     });
+    useSearchParamsMock.mockReturnValue([new URLSearchParams('workspace=removed-workspace'), jest.fn()]);
 
     fetchAPIMock.mockResolvedValue({
       // Return workspaces that don't include the current one
@@ -271,10 +276,10 @@ describe('WorkspaceSelector', () => {
 
     renderWithProviders(<WorkspaceSelector />);
 
-    // Should automatically redirect to default workspace
+    // Should automatically redirect to default workspace with query param
     await waitFor(
       () => {
-        expect(mockNavigate).toHaveBeenCalledWith('/workspaces/default/experiments');
+        expect(mockNavigate).toHaveBeenCalledWith('/experiments?workspace=default');
       },
       { timeout: 3000 },
     );

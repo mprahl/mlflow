@@ -122,7 +122,8 @@ describe('WorkspacesHomeView', () => {
     const workspaceLink = screen.getByText('ml-research');
     await user.click(workspaceLink);
 
-    expect(mockNavigate).toHaveBeenCalledWith('/workspaces/ml-research');
+    // Now uses query param instead of path prefix
+    expect(mockNavigate).toHaveBeenCalledWith('/?workspace=ml-research');
   });
 
   test('encodes workspace name in URL', async () => {
@@ -139,7 +140,8 @@ describe('WorkspacesHomeView', () => {
     const workspaceLink = screen.getByText('team-a/special');
     await user.click(workspaceLink);
 
-    expect(mockNavigate).toHaveBeenCalledWith('/workspaces/team-a%2Fspecial');
+    // Now uses query param instead of path prefix
+    expect(mockNavigate).toHaveBeenCalledWith('/?workspace=team-a%2Fspecial');
   });
 
   test('shows create new workspace button when workspaces exist', () => {

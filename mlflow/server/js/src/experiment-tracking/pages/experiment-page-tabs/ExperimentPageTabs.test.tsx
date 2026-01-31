@@ -13,7 +13,6 @@ import { QueryClient, QueryClientProvider } from '@mlflow/mlflow/src/common/util
 import { ExperimentKind } from '../../constants';
 import { createLazyRouteElement, createMLflowRoutePath } from '../../../common/utils/RoutingUtils';
 import { PageId, RoutePaths } from '../../routes';
-import { prefixRoutePathWithWorkspace } from '../../../common/utils/WorkspaceRouteUtils';
 
 // eslint-disable-next-line no-restricted-syntax -- TODO(FEINF-4392)
 jest.setTimeout(60000); // Larger timeout for integration testing
@@ -80,30 +79,29 @@ describe('ExperimentLoggedModelListPage', () => {
     rest.post('/ajax-api/2.0/mlflow/runs/search', (req, res, ctx) => res(ctx.json({ runs: [] }))),
   );
 
-  const createExperimentRoute = (pathMapper: (path: string) => string | undefined) => {
-    const mapPath = (path: string) => pathMapper(path) ?? path;
+  const createExperimentRoute = () => {
     return {
-      path: mapPath(RoutePaths.experimentPage),
+      path: RoutePaths.experimentPage,
       pageId: PageId.experimentPage,
       element: createLazyRouteElement(() => import('./ExperimentPageTabs')),
       children: [
         {
-          path: mapPath(RoutePaths.experimentPageTabOverview),
+          path: RoutePaths.experimentPageTabOverview,
           pageId: PageId.experimentPageTabOverview,
           element: createLazyRouteElement(() => import('../experiment-overview/ExperimentGenAIOverviewPage')),
         },
         {
-          path: mapPath(RoutePaths.experimentPageTabTraces),
+          path: RoutePaths.experimentPageTabTraces,
           pageId: PageId.experimentPageTabTraces,
           element: createLazyRouteElement(() => import('../experiment-traces/ExperimentTracesPage')),
         },
         {
-          path: mapPath(RoutePaths.experimentPageTabModels),
+          path: RoutePaths.experimentPageTabModels,
           pageId: PageId.experimentPageTabModels,
           element: createLazyRouteElement(() => import('../experiment-logged-models/ExperimentLoggedModelListPage')),
         },
         {
-          path: mapPath(RoutePaths.experimentPageTabRuns),
+          path: RoutePaths.experimentPageTabRuns,
           pageId: PageId.experimentPageTabRuns,
           element: createLazyRouteElement(() => import('../experiment-runs/ExperimentRunsPage')),
         },
@@ -120,7 +118,7 @@ describe('ExperimentLoggedModelListPage', () => {
             <QueryClientProvider client={queryClient}>
               <DesignSystemProvider>
                 <TestRouter
-                  routes={[createExperimentRoute((path) => path), createExperimentRoute(prefixRoutePathWithWorkspace)]}
+                  routes={[createExperimentRoute()]}
                   history={history}
                   initialEntries={[createMLflowRoutePath(initialPath)]}
                 />

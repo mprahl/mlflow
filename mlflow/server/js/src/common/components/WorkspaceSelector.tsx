@@ -11,18 +11,20 @@ import {
 } from '@databricks/design-system';
 
 import { shouldEnableWorkspaces } from '../utils/FeatureUtils';
-import { extractWorkspaceFromPathname, setActiveWorkspace } from '../utils/WorkspaceUtils';
-import { useLocation, useNavigate } from '../utils/RoutingUtils';
+import { extractWorkspaceFromSearchParams, setActiveWorkspace, WORKSPACE_QUERY_PARAM } from '../utils/WorkspaceUtils';
+import { useLocation, useNavigate, useSearchParams } from '../utils/RoutingUtils';
 import { useWorkspaces, type Workspace } from '../hooks/useWorkspaces';
 
 export const WorkspaceSelector = () => {
   const workspacesEnabled = shouldEnableWorkspaces();
   const [searchValue, setSearchValue] = useState('');
   const location = useLocation();
-  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate({ bypassWorkspacePrefix: true });
   const { theme } = useDesignSystemTheme();
 
-  const currentWorkspace = extractWorkspaceFromPathname(location.pathname);
+  // Extract workspace from query param
+  const currentWorkspace = extractWorkspaceFromSearchParams(searchParams);
 
   // Fetch workspaces using custom hook
   const { workspaces, isLoading, isError, refetch } = useWorkspaces(workspacesEnabled);
@@ -41,17 +43,18 @@ export const WorkspaceSelector = () => {
         return;
       }
 
-      const encodedWorkspace = encodeURIComponent(nextWorkspace);
       setActiveWorkspace(nextWorkspace);
 
-      // Smart redirect - preserve navigation section
+      // Smart redirect - preserve navigation section with workspace query param
       const currentSection = getNavigationSection(location.pathname);
-      const targetPath = `/workspaces/${encodedWorkspace}${currentSection}`;
+      const targetPath = currentSection || '/';
+      const newParams = new URLSearchParams(searchParams);
+      newParams.set(WORKSPACE_QUERY_PARAM, nextWorkspace);
 
-      navigate(targetPath);
+      navigate(`${targetPath}?${newParams.toString()}`);
       setSearchValue(''); // Clear search on selection
     },
-    [currentWorkspace, location.pathname, navigate],
+    [currentWorkspace, location.pathname, searchParams, navigate],
   );
 
   // Refresh workspaces when combobox is opened to catch label selector changes
@@ -91,16 +94,18 @@ export const WorkspaceSelector = () => {
       if (!workspaceExists) {
         // Current workspace no longer exists, redirect to the first available workspace
         const fallbackWorkspace = workspaces[0];
-        const encodedWorkspace = encodeURIComponent(fallbackWorkspace.name);
         setActiveWorkspace(fallbackWorkspace.name);
 
-        // Preserve navigation section
+        // Preserve navigation section with updated workspace query param
         const currentSection = getNavigationSection(location.pathname);
-        const targetPath = `/workspaces/${encodedWorkspace}${currentSection}`;
-        navigate(targetPath);
+        const targetPath = currentSection || '/';
+        const newParams = new URLSearchParams(searchParams);
+        newParams.set(WORKSPACE_QUERY_PARAM, fallbackWorkspace.name);
+
+        navigate(`${targetPath}?${newParams.toString()}`);
       }
     }
-  }, [workspaces, currentWorkspace, isLoading, isError, location.pathname, navigate]);
+  }, [workspaces, currentWorkspace, isLoading, isError, location.pathname, searchParams, navigate]);
 
   if (!workspacesEnabled) {
     return null;

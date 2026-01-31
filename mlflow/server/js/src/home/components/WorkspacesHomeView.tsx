@@ -4,6 +4,7 @@ import {
   Button,
   Input,
   Modal,
+  Pagination,
   PencilIcon,
   Spacer,
   Table,
@@ -17,7 +18,7 @@ import {
 import { FormattedMessage, useIntl } from 'react-intl';
 import { Link, useNavigate } from '../../common/utils/RoutingUtils';
 import { useWorkspaces, type Workspace } from '../../common/hooks/useWorkspaces';
-import { getActiveWorkspace, setActiveWorkspace } from '../../common/utils/WorkspaceUtils';
+import { getActiveWorkspace, setActiveWorkspace, WORKSPACE_QUERY_PARAM } from '../../common/utils/WorkspaceUtils';
 import { useUpdateWorkspace } from '../../common/hooks/useUpdateWorkspace';
 import Utils from '../../common/utils/Utils';
 
@@ -68,8 +69,8 @@ const WorkspaceRow = ({ workspace, isLastUsed }: { workspace: Workspace; isLastU
 
   const handleNameClick = () => {
     setActiveWorkspace(workspace.name);
-    // Navigate to the home page within the workspace
-    navigate(`/workspaces/${encodeURIComponent(workspace.name)}`);
+    // Navigate to the home page with workspace query param
+    navigate(`/?${WORKSPACE_QUERY_PARAM}=${encodeURIComponent(workspace.name)}`);
   };
 
   const handleEditClick = (field: 'description' | 'artifact_root', currentValue: string | null | undefined) => {
@@ -121,7 +122,8 @@ const WorkspaceRow = ({ workspace, isLastUsed }: { workspace: Workspace; isLastU
         <TableCell>
           <div css={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm }}>
             <Link
-              to={`/workspaces/${encodeURIComponent(workspace.name)}`}
+              disableWorkspacePrefix
+              to={`/?${WORKSPACE_QUERY_PARAM}=${encodeURIComponent(workspace.name)}`}
               onClick={(e) => {
                 e.preventDefault();
                 handleNameClick();
@@ -294,12 +296,29 @@ const WorkspaceRow = ({ workspace, isLastUsed }: { workspace: Workspace; isLastU
   );
 };
 
+const WORKSPACES_PER_PAGE = 10;
+
 export const WorkspacesHomeView = ({ onCreateWorkspace }: WorkspacesHomeViewProps) => {
   const { theme } = useDesignSystemTheme();
   const { workspaces, isLoading, isError, refetch } = useWorkspaces(true);
   const currentWorkspace = getActiveWorkspace();
+  const [currentPage, setCurrentPage] = useState(1);
 
   const shouldShowEmptyState = !isLoading && !isError && workspaces.length === 0;
+
+  // Calculate paginated workspaces
+  const paginatedWorkspaces = useMemo(() => {
+    const startIndex = (currentPage - 1) * WORKSPACES_PER_PAGE;
+    const endIndex = startIndex + WORKSPACES_PER_PAGE;
+    return workspaces.slice(startIndex, endIndex);
+  }, [workspaces, currentPage]);
+
+  // Reset to page 1 when workspaces change
+  useMemo(() => {
+    if (currentPage > 1 && paginatedWorkspaces.length === 0 && workspaces.length > 0) {
+      setCurrentPage(1);
+    }
+  }, [workspaces.length, currentPage, paginatedWorkspaces.length]);
 
   return (
     <section css={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.sm }}>
@@ -384,7 +403,7 @@ export const WorkspacesHomeView = ({ onCreateWorkspace }: WorkspacesHomeViewProp
                 <TableCell />
               </TableRow>
             ) : (
-              workspaces.map((workspace) => (
+              paginatedWorkspaces.map((workspace) => (
                 <WorkspaceRow
                   key={workspace.name}
                   workspace={workspace}
@@ -393,6 +412,24 @@ export const WorkspacesHomeView = ({ onCreateWorkspace }: WorkspacesHomeViewProp
               ))
             )}
           </Table>
+        )}
+        {!shouldShowEmptyState && !isLoading && !isError && workspaces.length > WORKSPACES_PER_PAGE && (
+          <div
+            css={{
+              padding: theme.spacing.md,
+              display: 'flex',
+              justifyContent: 'center',
+              borderTop: `1px solid ${theme.colors.border}`,
+            }}
+          >
+            <Pagination
+              componentId="mlflow.home.workspaces.pagination"
+              currentPageIndex={currentPage}
+              numTotal={workspaces.length}
+              pageSize={WORKSPACES_PER_PAGE}
+              onChange={(newPageNumber) => setCurrentPage(newPageNumber)}
+            />
+          </div>
         )}
       </div>
       <Spacer shrinks={false} />

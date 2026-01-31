@@ -3,14 +3,18 @@ import {
   getActiveWorkspace,
   setActiveWorkspace,
   extractWorkspaceFromPathname,
+  extractWorkspaceFromSearchParams,
   subscribeToWorkspaceChanges,
   setAvailableWorkspaces,
   getAvailableWorkspaces,
   prefixRouteWithWorkspace,
   prefixPathnameWithWorkspace,
   validateWorkspaceName,
+  isGlobalRoute,
+  removeWorkspaceQueryParam,
   WORKSPACE_NAME_MIN_LENGTH,
   WORKSPACE_NAME_MAX_LENGTH,
+  WORKSPACE_QUERY_PARAM,
 } from './WorkspaceUtils';
 import { getWorkspacesEnabledSync } from './ServerFeaturesContext';
 
@@ -137,7 +141,35 @@ describe('WorkspaceUtils', () => {
     });
   });
 
-  describe('extractWorkspaceFromPathname', () => {
+  describe('extractWorkspaceFromSearchParams', () => {
+    it('extracts workspace from URLSearchParams', () => {
+      const params = new URLSearchParams('workspace=default');
+      expect(extractWorkspaceFromSearchParams(params)).toBe('default');
+    });
+
+    it('extracts workspace from query string', () => {
+      expect(extractWorkspaceFromSearchParams('workspace=team-a')).toBe('team-a');
+      expect(extractWorkspaceFromSearchParams('?workspace=team-b')).toBe('team-b');
+    });
+
+    it('returns null when workspace param is missing', () => {
+      expect(extractWorkspaceFromSearchParams('')).toBeNull();
+      expect(extractWorkspaceFromSearchParams('other=value')).toBeNull();
+    });
+
+    it('returns null for invalid workspace names', () => {
+      expect(extractWorkspaceFromSearchParams('workspace=UPPERCASE')).toBeNull();
+      expect(extractWorkspaceFromSearchParams('workspace=has spaces')).toBeNull();
+      expect(extractWorkspaceFromSearchParams('workspace=has--double-hyphen')).toBeNull();
+    });
+
+    it('handles URL-encoded workspace names', () => {
+      // Valid name that's URL-encoded
+      expect(extractWorkspaceFromSearchParams('workspace=team-a')).toBe('team-a');
+    });
+  });
+
+  describe('extractWorkspaceFromPathname (legacy)', () => {
     it('returns null for paths without workspace prefix', () => {
       expect(extractWorkspaceFromPathname('/experiments')).toBeNull();
       expect(extractWorkspaceFromPathname('/models/123')).toBeNull();
@@ -166,6 +198,55 @@ describe('WorkspaceUtils', () => {
     it('returns null for malformed workspace paths', () => {
       expect(extractWorkspaceFromPathname('/workspaces/')).toBeNull();
       expect(extractWorkspaceFromPathname('/workspaces')).toBeNull();
+    });
+  });
+
+  describe('isGlobalRoute', () => {
+    it('returns false for root path (handled specially in prefixRouteWithWorkspace)', () => {
+      // Root path is NOT in ALWAYS_GLOBAL_ROUTES - it's handled specially:
+      // - '/' without workspace param = workspace selector (no workspace added)
+      // - '/?workspace=foo' = workspace home (preserve workspace)
+      expect(isGlobalRoute('/')).toBe(false);
+    });
+
+    it('returns true for settings path (always global)', () => {
+      expect(isGlobalRoute('/settings')).toBe(true);
+      expect(isGlobalRoute('/settings/general')).toBe(true);
+    });
+
+    it('returns false for workspace-scoped paths', () => {
+      expect(isGlobalRoute('/experiments')).toBe(false);
+      expect(isGlobalRoute('/models')).toBe(false);
+      expect(isGlobalRoute('/prompts')).toBe(false);
+    });
+
+    it('ignores query params and hash', () => {
+      expect(isGlobalRoute('/?workspace=default')).toBe(false);
+      expect(isGlobalRoute('/settings?tab=general#section')).toBe(true);
+    });
+  });
+
+  describe('removeWorkspaceQueryParam', () => {
+    it('removes workspace param from query string', () => {
+      expect(removeWorkspaceQueryParam('/experiments?workspace=default')).toBe('/experiments');
+    });
+
+    it('preserves other query params', () => {
+      expect(removeWorkspaceQueryParam('/experiments?workspace=default&filter=active')).toBe(
+        '/experiments?filter=active',
+      );
+    });
+
+    it('handles hash prefix', () => {
+      expect(removeWorkspaceQueryParam('#/experiments?workspace=default')).toBe('#/experiments');
+    });
+
+    it('preserves hash fragment', () => {
+      expect(removeWorkspaceQueryParam('/experiments?workspace=default#section')).toBe('/experiments#section');
+    });
+
+    it('returns unchanged if no workspace param', () => {
+      expect(removeWorkspaceQueryParam('/experiments?filter=active')).toBe('/experiments?filter=active');
     });
   });
 
@@ -245,45 +326,66 @@ describe('WorkspaceUtils', () => {
       expect(prefixRouteWithWorkspace('models/123')).toBe('models/123');
     });
 
-    it('prefixes absolute paths with workspace', () => {
-      expect(prefixRouteWithWorkspace('/experiments')).toBe('/workspaces/default/experiments');
-      expect(prefixRouteWithWorkspace('/models/123')).toBe('/workspaces/default/models/123');
+    it('adds workspace query param to absolute paths', () => {
+      expect(prefixRouteWithWorkspace('/experiments')).toBe('/experiments?workspace=default');
+      expect(prefixRouteWithWorkspace('/models/123')).toBe('/models/123?workspace=default');
     });
 
-    it('handles hash fragments correctly', () => {
-      expect(prefixRouteWithWorkspace('#/experiments')).toBe('#/workspaces/default/experiments');
-      expect(prefixRouteWithWorkspace('/experiments#section')).toBe('/workspaces/default/experiments#section');
+    it('handles hash prefix correctly', () => {
+      expect(prefixRouteWithWorkspace('#/experiments')).toBe('#/experiments?workspace=default');
     });
 
-    it('handles query strings correctly', () => {
-      expect(prefixRouteWithWorkspace('/experiments?search=test')).toBe('/workspaces/default/experiments?search=test');
-      expect(prefixRouteWithWorkspace('/models?filter=active#top')).toBe(
-        '/workspaces/default/models?filter=active#top',
-      );
+    it('preserves existing hash fragments', () => {
+      expect(prefixRouteWithWorkspace('/experiments#section')).toBe('/experiments?workspace=default#section');
     });
 
-    it('does not double-prefix already workspace-prefixed paths', () => {
-      const path = '/workspaces/team-a/experiments';
-      expect(prefixRouteWithWorkspace(path)).toBe(path);
+    it('preserves existing query params', () => {
+      expect(prefixRouteWithWorkspace('/experiments?search=test')).toBe('/experiments?search=test&workspace=default');
     });
 
-    it('returns path unprefixed when no workspace set', () => {
+    it('handles query strings and hash together', () => {
+      expect(prefixRouteWithWorkspace('/models?filter=active#top')).toBe('/models?filter=active&workspace=default#top');
+    });
+
+    it('preserves explicit workspace param in URL', () => {
+      // If URL already has explicit workspace, preserve it (don't override with active workspace)
+      const path = '/experiments?workspace=old-workspace';
+      expect(prefixRouteWithWorkspace(path)).toBe('/experiments?workspace=old-workspace');
+    });
+
+    it('returns path without workspace param when no workspace set', () => {
       setActiveWorkspace(null);
       expect(prefixRouteWithWorkspace('/experiments')).toBe('/experiments');
     });
 
-    it('handles root path correctly', () => {
-      expect(prefixRouteWithWorkspace('/')).toBe('/workspaces/default');
+    it('adds workspace param to root path when workspace is active (workspace home)', () => {
+      // Root path with active workspace gets workspace param added (workspace home)
+      expect(prefixRouteWithWorkspace('/')).toBe('/?workspace=default');
+    });
+
+    it('does not add workspace param to root path when no workspace is active', () => {
+      setActiveWorkspace(null);
+      expect(prefixRouteWithWorkspace('/')).toBe('/');
+    });
+
+    it('preserves explicit workspace param on root path', () => {
+      // Root path with explicit workspace is preserved as-is
+      expect(prefixRouteWithWorkspace('/?workspace=old')).toBe('/?workspace=old');
+    });
+
+    it('removes workspace param for global routes (settings)', () => {
+      expect(prefixRouteWithWorkspace('/settings')).toBe('/settings');
+      expect(prefixRouteWithWorkspace('/settings?workspace=old')).toBe('/settings');
     });
 
     it('uses different workspace when set', () => {
       setActiveWorkspace('team-a');
-      expect(prefixRouteWithWorkspace('/experiments')).toBe('/workspaces/team-a/experiments');
+      expect(prefixRouteWithWorkspace('/experiments')).toBe('/experiments?workspace=team-a');
     });
 
-    it('encodes workspace name in URL', () => {
-      setActiveWorkspace('team with spaces');
-      expect(prefixRouteWithWorkspace('/experiments')).toBe('/workspaces/team%20with%20spaces/experiments');
+    it('encodes workspace name in query param', () => {
+      setActiveWorkspace('team-with-hyphen');
+      expect(prefixRouteWithWorkspace('/experiments')).toBe('/experiments?workspace=team-with-hyphen');
     });
   });
 
@@ -292,41 +394,46 @@ describe('WorkspaceUtils', () => {
       setActiveWorkspace('default');
     });
 
-    it('returns workspace path for undefined pathname', () => {
-      expect(prefixPathnameWithWorkspace(undefined)).toBe('/workspaces/default');
+    it('returns undefined for undefined pathname', () => {
+      expect(prefixPathnameWithWorkspace(undefined)).toBeUndefined();
     });
 
     it('returns original for absolute URLs', () => {
       expect(prefixPathnameWithWorkspace('https://example.com')).toBe('https://example.com');
     });
 
-    it('returns original for non-absolute paths', () => {
-      expect(prefixPathnameWithWorkspace('relative/path')).toBe('relative/path');
+    it('adds workspace query param to pathname', () => {
+      expect(prefixPathnameWithWorkspace('/experiments')).toBe('/experiments?workspace=default');
+      expect(prefixPathnameWithWorkspace('/models/123')).toBe('/models/123?workspace=default');
     });
 
-    it('prefixes pathname with workspace', () => {
-      expect(prefixPathnameWithWorkspace('/experiments')).toBe('/workspaces/default/experiments');
-      expect(prefixPathnameWithWorkspace('/models/123')).toBe('/workspaces/default/models/123');
+    it('adds workspace param to root path when workspace is active', () => {
+      expect(prefixPathnameWithWorkspace('/')).toBe('/?workspace=default');
     });
 
-    it('handles root path correctly', () => {
-      expect(prefixPathnameWithWorkspace('/')).toBe('/workspaces/default');
-      expect(prefixPathnameWithWorkspace('')).toBe('/workspaces/default');
+    it('returns root path unchanged when no workspace is active', () => {
+      setActiveWorkspace(null);
+      expect(prefixPathnameWithWorkspace('/')).toBe('/');
     });
 
-    it('does not double-prefix workspace paths', () => {
-      const path = '/workspaces/team-a/experiments';
-      expect(prefixPathnameWithWorkspace(path)).toBe(path);
+    it('returns always-global routes unchanged (settings)', () => {
+      setActiveWorkspace('default');
+      expect(prefixPathnameWithWorkspace('/settings')).toBe('/settings');
     });
 
-    it('returns path without workspace when feature disabled', () => {
+    it('returns pathname without workspace when feature disabled', () => {
       getWorkspacesEnabledSyncMock.mockReturnValue(false);
       expect(prefixPathnameWithWorkspace('/experiments')).toBe('/experiments');
     });
 
     it('uses active workspace when set', () => {
       setActiveWorkspace('team-b');
-      expect(prefixPathnameWithWorkspace('/models')).toBe('/workspaces/team-b/models');
+      expect(prefixPathnameWithWorkspace('/models')).toBe('/models?workspace=team-b');
+    });
+
+    it('returns pathname unchanged when no workspace set', () => {
+      setActiveWorkspace(null);
+      expect(prefixPathnameWithWorkspace('/experiments')).toBe('/experiments');
     });
   });
 });
