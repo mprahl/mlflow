@@ -11,7 +11,7 @@ import {
 import { FormattedMessage } from 'react-intl';
 import { CodeSnippet } from '@databricks/web-shared/snippet';
 import { CopyButton } from '../../../shared/building_blocks/CopyButton';
-import { getActiveWorkspace } from '../../../common/utils/WorkspaceUtils';
+import { getActiveWorkspace } from '../../../workspaces/utils/WorkspaceUtils';
 
 type Props = {
   isOpen: boolean;

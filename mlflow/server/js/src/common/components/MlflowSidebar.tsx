@@ -36,7 +36,7 @@ import { useLogTelemetryEvent } from '../../telemetry/hooks/useLogTelemetryEvent
 import { useAssistant } from '../../assistant';
 import { AssistantSparkleIcon } from '../../assistant/AssistantIconButton';
 import { shouldEnableWorkspaces } from '../utils/FeatureUtils';
-import { extractWorkspaceFromSearchParams } from '../utils/WorkspaceUtils';
+import { extractWorkspaceFromSearchParams } from '../../workspaces/utils/WorkspaceUtils';
 
 // With query param-based workspace routing, paths no longer contain workspace prefix
 const isHomeActive = (location: Location) => matchPath({ path: '/', end: true }, location.pathname);

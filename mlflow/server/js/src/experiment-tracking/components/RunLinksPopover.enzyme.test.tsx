@@ -12,7 +12,7 @@ import { shallow, mount } from 'enzyme';
 
 import { RunLinksPopover } from './RunLinksPopover';
 import Routes from '../routes';
-import { prefixRouteWithWorkspace } from '../../common/utils/WorkspaceUtils';
+import { prefixRouteWithWorkspace } from '../../workspaces/utils/WorkspaceUtils';
 
 describe('unit tests', () => {
   let wrapper;

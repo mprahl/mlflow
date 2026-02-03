@@ -9,10 +9,15 @@ import {
   useDesignSystemTheme,
   Tooltip,
 } from '@databricks/design-system';
+import { uniqBy } from 'lodash';
 
-import { shouldEnableWorkspaces } from '../utils/FeatureUtils';
-import { extractWorkspaceFromSearchParams, setActiveWorkspace, WORKSPACE_QUERY_PARAM } from '../utils/WorkspaceUtils';
-import { useLocation, useNavigate, useSearchParams } from '../utils/RoutingUtils';
+import { shouldEnableWorkspaces } from '../../common/utils/FeatureUtils';
+import {
+  extractWorkspaceFromSearchParams,
+  setActiveWorkspace,
+  WORKSPACE_QUERY_PARAM,
+} from '../../workspaces/utils/WorkspaceUtils';
+import { useLocation, useNavigate, useSearchParams } from '../../common/utils/RoutingUtils';
 import { useWorkspaces, type Workspace } from '../hooks/useWorkspaces';
 
 export const WorkspaceSelector = () => {
@@ -65,17 +70,14 @@ export const WorkspaceSelector = () => {
   };
 
   const options = useMemo(() => {
-    const deduped = new Map<string, Workspace>();
+    const allWorkspaces = [...workspaces];
 
-    for (const workspace of workspaces) {
-      deduped.set(workspace.name, workspace);
+    // Add current workspace if it's not in the list
+    if (currentWorkspace && !workspaces.some((w) => w.name === currentWorkspace)) {
+      allWorkspaces.push({ name: currentWorkspace, description: null });
     }
 
-    if (currentWorkspace && !deduped.has(currentWorkspace)) {
-      deduped.set(currentWorkspace, { name: currentWorkspace, description: null });
-    }
-
-    return Array.from(deduped.values());
+    return uniqBy(allWorkspaces, 'name');
   }, [workspaces, currentWorkspace]);
 
   // Client-side filtering

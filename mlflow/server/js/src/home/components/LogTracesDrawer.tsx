@@ -16,7 +16,7 @@ import { CopyButton } from '@mlflow/mlflow/src/shared/building_blocks/CopyButton
 import { CodeSnippet } from '@databricks/web-shared/snippet';
 import { Link } from '../../common/utils/RoutingUtils';
 import Routes from '../../experiment-tracking/routes';
-import { getActiveWorkspace } from '../../common/utils/WorkspaceUtils';
+import { getActiveWorkspace } from '../../workspaces/utils/WorkspaceUtils';
 import OpenAiLogo from '../../common/static/logos/openai.svg';
 import OpenAiLogoDark from '../../common/static/logos/openai-dark.svg';
 import LangChainLogo from '../../common/static/logos/langchain.svg';

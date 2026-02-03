@@ -4,11 +4,11 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClientProvider, QueryClient } from '@databricks/web-shared/query-client';
 
 import { useWorkspaces } from './useWorkspaces';
-import { getAvailableWorkspaces } from '../utils/WorkspaceUtils';
-import { fetchAPI } from '../utils/FetchUtils';
+import { getAvailableWorkspaces } from '../../workspaces/utils/WorkspaceUtils';
+import { fetchAPI } from '../../common/utils/FetchUtils';
 
-jest.mock('../utils/FetchUtils', () => ({
-  ...jest.requireActual<typeof import('../utils/FetchUtils')>('../utils/FetchUtils'),
+jest.mock('../../common/utils/FetchUtils', () => ({
+  ...jest.requireActual<typeof import('../../common/utils/FetchUtils')>('../../common/utils/FetchUtils'),
   fetchAPI: jest.fn(),
 }));
 

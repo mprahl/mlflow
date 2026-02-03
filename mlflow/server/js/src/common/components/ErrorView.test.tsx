@@ -3,7 +3,7 @@ import React from 'react';
 import { ErrorView } from './ErrorView';
 import { renderWithIntl, screen } from '@mlflow/mlflow/src/common/utils/TestUtils.react18';
 import { MemoryRouter } from '../utils/RoutingUtils';
-import { setActiveWorkspace } from '../utils/WorkspaceUtils';
+import { setActiveWorkspace } from '../../workspaces/utils/WorkspaceUtils';
 import { getWorkspacesEnabledSync } from '../utils/ServerFeaturesContext';
 
 jest.mock('../utils/ServerFeaturesContext', () => ({

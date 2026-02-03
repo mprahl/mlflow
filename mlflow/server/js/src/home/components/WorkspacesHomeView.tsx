@@ -17,9 +17,9 @@ import {
 } from '@databricks/design-system';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { Link, useNavigate } from '../../common/utils/RoutingUtils';
-import { useWorkspaces, type Workspace } from '../../common/hooks/useWorkspaces';
-import { getActiveWorkspace, setActiveWorkspace, WORKSPACE_QUERY_PARAM } from '../../common/utils/WorkspaceUtils';
-import { useUpdateWorkspace } from '../../common/hooks/useUpdateWorkspace';
+import { useWorkspaces, type Workspace } from '../../workspaces/hooks/useWorkspaces';
+import { getLastUsedWorkspace, setActiveWorkspace, WORKSPACE_QUERY_PARAM } from '../../workspaces/utils/WorkspaceUtils';
+import { useUpdateWorkspace } from '../../workspaces/hooks/useUpdateWorkspace';
 import Utils from '../../common/utils/Utils';
 
 type WorkspacesHomeViewProps = {
@@ -301,7 +301,8 @@ const WORKSPACES_PER_PAGE = 10;
 export const WorkspacesHomeView = ({ onCreateWorkspace }: WorkspacesHomeViewProps) => {
   const { theme } = useDesignSystemTheme();
   const { workspaces, isLoading, isError, refetch } = useWorkspaces(true);
-  const currentWorkspace = getActiveWorkspace();
+  // Get last used workspace from localStorage for the "Last used" badge
+  const lastUsedWorkspace = getLastUsedWorkspace();
   const [currentPage, setCurrentPage] = useState(1);
 
   const shouldShowEmptyState = !isLoading && !isError && workspaces.length === 0;
@@ -407,7 +408,7 @@ export const WorkspacesHomeView = ({ onCreateWorkspace }: WorkspacesHomeViewProp
                 <WorkspaceRow
                   key={workspace.name}
                   workspace={workspace}
-                  isLastUsed={workspace.name === currentWorkspace}
+                  isLastUsed={workspace.name === lastUsedWorkspace}
                 />
               ))
             )}

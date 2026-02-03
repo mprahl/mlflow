@@ -12,7 +12,7 @@ import { render, waitFor } from '../../../common/utils/TestUtils.react18';
 import { apis, artifactsByRunUuid } from '../../reducers/Reducers';
 import { ExperimentLoggedModelDetailsArtifacts } from './ExperimentLoggedModelDetailsArtifacts';
 import { setupTestRouter, testRoute, TestRouter } from '../../../common/utils/RoutingTestUtils';
-import { setActiveWorkspace } from '../../../common/utils/WorkspaceUtils';
+import { setActiveWorkspace } from '../../../workspaces/utils/WorkspaceUtils';
 import { getWorkspacesEnabledSync } from '../../../common/utils/ServerFeaturesContext';
 
 jest.mock('../../../common/utils/ServerFeaturesContext', () => ({

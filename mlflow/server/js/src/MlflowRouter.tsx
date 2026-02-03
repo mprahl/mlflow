@@ -33,8 +33,8 @@ import {
   getActiveWorkspace,
   isGlobalRoute,
   WORKSPACE_QUERY_PARAM,
-} from './common/utils/WorkspaceUtils';
-import { useWorkspaces } from './common/hooks/useWorkspaces';
+} from './workspaces/utils/WorkspaceUtils';
+import { useWorkspaces } from './workspaces/hooks/useWorkspaces';
 
 type MlflowRouteDef = {
   path?: string;

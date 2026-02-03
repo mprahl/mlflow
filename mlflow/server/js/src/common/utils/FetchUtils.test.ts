@@ -35,7 +35,7 @@ import {
   deleteYaml,
 } from './FetchUtils';
 import { ErrorWrapper } from './ErrorWrapper';
-import { setActiveWorkspace } from './WorkspaceUtils';
+import { setActiveWorkspace } from '../../workspaces/utils/WorkspaceUtils';
 import { getWorkspacesEnabledSync } from './ServerFeaturesContext';
 
 jest.mock('./ServerFeaturesContext', () => ({

@@ -6,7 +6,7 @@ import { RunViewChildRunsBox } from './RunViewChildRunsBox';
 import { MlflowService } from '../../../sdk/MlflowService';
 import userEvent from '@testing-library/user-event';
 import type { RunInfoEntity } from '../../../types';
-import { prefixRouteWithWorkspace } from '../../../../common/utils/WorkspaceUtils';
+import { prefixRouteWithWorkspace } from '../../../../workspaces/utils/WorkspaceUtils';
 import Routes from '../../../routes';
 
 jest.mock('../../../sdk/MlflowService', () => ({

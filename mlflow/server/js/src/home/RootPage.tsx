@@ -1,7 +1,7 @@
 import React from 'react';
 import { useSearchParams } from '../common/utils/RoutingUtils';
 import { shouldEnableWorkspaces } from '../common/utils/FeatureUtils';
-import { extractWorkspaceFromSearchParams } from '../common/utils/WorkspaceUtils';
+import { extractWorkspaceFromSearchParams } from '../workspaces/utils/WorkspaceUtils';
 
 const WorkspaceLandingPage = React.lazy(() => import('./WorkspaceLandingPage'));
 const HomePage = React.lazy(() => import('./HomePage'));

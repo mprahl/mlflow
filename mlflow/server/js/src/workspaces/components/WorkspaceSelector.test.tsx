@@ -7,24 +7,24 @@ import { QueryClient, QueryClientProvider } from '@databricks/web-shared/query-c
 import { DesignSystemProvider } from '@databricks/design-system';
 
 import { WorkspaceSelector } from './WorkspaceSelector';
-import { shouldEnableWorkspaces } from '../utils/FeatureUtils';
+import { shouldEnableWorkspaces } from '../../common/utils/FeatureUtils';
 import { setActiveWorkspace } from '../utils/WorkspaceUtils';
-import { MemoryRouter, useNavigate, useLocation, useSearchParams } from '../utils/RoutingUtils';
-import { fetchAPI } from '../utils/FetchUtils';
+import { MemoryRouter, useNavigate, useLocation, useSearchParams } from '../../common/utils/RoutingUtils';
+import { fetchAPI } from '../../common/utils/FetchUtils';
 
-jest.mock('../utils/FeatureUtils', () => ({
+jest.mock('../../common/utils/FeatureUtils', () => ({
   shouldEnableWorkspaces: jest.fn(),
 }));
 
-jest.mock('../utils/RoutingUtils', () => ({
-  ...jest.requireActual<typeof import('../utils/RoutingUtils')>('../utils/RoutingUtils'),
+jest.mock('../../common/utils/RoutingUtils', () => ({
+  ...jest.requireActual<typeof import('../../common/utils/RoutingUtils')>('../../common/utils/RoutingUtils'),
   useNavigate: jest.fn(),
   useLocation: jest.fn(),
   useSearchParams: jest.fn(),
 }));
 
-jest.mock('../utils/FetchUtils', () => ({
-  ...jest.requireActual<typeof import('../utils/FetchUtils')>('../utils/FetchUtils'),
+jest.mock('../../common/utils/FetchUtils', () => ({
+  ...jest.requireActual<typeof import('../../common/utils/FetchUtils')>('../../common/utils/FetchUtils'),
   fetchAPI: jest.fn(),
 }));
 

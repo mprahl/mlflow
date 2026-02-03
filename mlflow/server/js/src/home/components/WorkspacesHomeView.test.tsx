@@ -3,14 +3,14 @@ import { waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import userEvent from '@testing-library/user-event';
 import { WorkspacesHomeView } from './WorkspacesHomeView';
-import { useWorkspaces } from '../../common/hooks/useWorkspaces';
-import { getActiveWorkspace } from '../../common/utils/WorkspaceUtils';
+import { useWorkspaces } from '../../workspaces/hooks/useWorkspaces';
+import { getLastUsedWorkspace } from '../../workspaces/utils/WorkspaceUtils';
 import { renderWithIntl, screen } from '@mlflow/mlflow/src/common/utils/TestUtils.react18';
 import { MemoryRouter } from '../../common/utils/RoutingUtils';
 import { QueryClient, QueryClientProvider } from '@mlflow/mlflow/src/common/utils/reactQueryHooks';
 
-jest.mock('../../common/hooks/useWorkspaces');
-jest.mock('../../common/utils/WorkspaceUtils');
+jest.mock('../../workspaces/hooks/useWorkspaces');
+jest.mock('../../workspaces/utils/WorkspaceUtils');
 
 const mockNavigate = jest.fn();
 jest.mock('../../common/utils/RoutingUtils', () => ({
@@ -23,7 +23,8 @@ describe('WorkspacesHomeView', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    (getActiveWorkspace as jest.Mock).mockReturnValue('ml-research');
+    // Mock last used workspace for "Last used" badge
+    (getLastUsedWorkspace as jest.Mock).mockReturnValue('ml-research');
   });
 
   const renderComponent = () => {
@@ -70,7 +71,6 @@ describe('WorkspacesHomeView', () => {
   });
 
   test('calls onCreateWorkspace when create button clicked in empty state', async () => {
-    const user = userEvent.setup();
     (useWorkspaces as jest.Mock).mockReturnValue({
       workspaces: [],
       isLoading: false,
@@ -80,7 +80,7 @@ describe('WorkspacesHomeView', () => {
 
     renderComponent();
     const createButton = screen.getByText('Create workspace');
-    await user.click(createButton);
+    await userEvent.click(createButton);
     expect(mockOnCreateWorkspace).toHaveBeenCalledTimes(1);
   });
 
@@ -109,7 +109,6 @@ describe('WorkspacesHomeView', () => {
   });
 
   test('navigates to workspace when row clicked', async () => {
-    const user = userEvent.setup();
     (useWorkspaces as jest.Mock).mockReturnValue({
       workspaces: [{ name: 'ml-research', description: 'Research experiments' }],
       isLoading: false,
@@ -120,14 +119,13 @@ describe('WorkspacesHomeView', () => {
     renderComponent();
 
     const workspaceLink = screen.getByText('ml-research');
-    await user.click(workspaceLink);
+    await userEvent.click(workspaceLink);
 
     // Now uses query param instead of path prefix
     expect(mockNavigate).toHaveBeenCalledWith('/?workspace=ml-research');
   });
 
   test('encodes workspace name in URL', async () => {
-    const user = userEvent.setup();
     (useWorkspaces as jest.Mock).mockReturnValue({
       workspaces: [{ name: 'team-a/special', description: 'Special workspace' }],
       isLoading: false,
@@ -138,7 +136,7 @@ describe('WorkspacesHomeView', () => {
     renderComponent();
 
     const workspaceLink = screen.getByText('team-a/special');
-    await user.click(workspaceLink);
+    await userEvent.click(workspaceLink);
 
     // Now uses query param instead of path prefix
     expect(mockNavigate).toHaveBeenCalledWith('/?workspace=team-a%2Fspecial');
@@ -171,7 +169,6 @@ describe('WorkspacesHomeView', () => {
   });
 
   test('calls refetch when retry button clicked', async () => {
-    const user = userEvent.setup();
     const mockRefetch = jest.fn();
     (useWorkspaces as jest.Mock).mockReturnValue({
       workspaces: [],
@@ -182,7 +179,7 @@ describe('WorkspacesHomeView', () => {
 
     renderComponent();
     const retryButton = screen.getByText('Retry');
-    await user.click(retryButton);
+    await userEvent.click(retryButton);
     expect(mockRefetch).toHaveBeenCalledTimes(1);
   });
 });

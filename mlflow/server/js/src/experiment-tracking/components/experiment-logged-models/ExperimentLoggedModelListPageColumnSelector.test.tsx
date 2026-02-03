@@ -59,17 +59,16 @@ describe('ExperimentLoggedModelListPageColumnSelector', () => {
     });
   };
   test('should handle enabling and disabling arbitrary columns', async () => {
-    const user = userEvent.setup();
     renderTestComponent();
 
     // We start with no columns hidden
     expect(currentColumnVisibility).toEqual({});
 
     // Click on the columns selector
-    await user.click(screen.getByRole('button', { name: 'Columns' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Columns' }));
 
     // Toggle "eval" dataset metrics
-    await user.click(screen.getByTitle('Dataset: eval (#1234-eval)'));
+    await userEvent.click(screen.getByTitle('Dataset: eval (#1234-eval)'));
 
     // We should have only eval metrics hidden
     expect(currentColumnVisibility).toEqual({
@@ -78,7 +77,7 @@ describe('ExperimentLoggedModelListPageColumnSelector', () => {
     });
 
     // Now toggle ungrouped metrics
-    await user.click(screen.getByTitle('No dataset'));
+    await userEvent.click(screen.getByTitle('No dataset'));
 
     expect(currentColumnVisibility).toEqual({
       'metrics.{"metricKey":"alpha","datasetName":"eval","datasetDigest":"1234-eval"}': false,
@@ -87,9 +86,9 @@ describe('ExperimentLoggedModelListPageColumnSelector', () => {
     });
 
     // Disable attribute columns one by one
-    await user.click(screen.getByTitle('Status'));
-    await user.click(screen.getByTitle('Source run'));
-    await user.click(screen.getByTitle('Dataset'));
+    await userEvent.click(screen.getByTitle('Status'));
+    await userEvent.click(screen.getByTitle('Source run'));
+    await userEvent.click(screen.getByTitle('Dataset'));
 
     expect(currentColumnVisibility).toEqual({
       'metrics.{"metricKey":"alpha","datasetName":"eval","datasetDigest":"1234-eval"}': false,
@@ -101,14 +100,14 @@ describe('ExperimentLoggedModelListPageColumnSelector', () => {
     });
 
     // Toggle datasets and attributes again
-    await user.click(screen.getByTitle('Dataset: eval (#1234-eval)'));
-    await user.click(screen.getByTitle('No dataset'));
-    await user.click(screen.getByTitle('Status'));
-    await user.click(screen.getByTitle('Source run'));
-    await user.click(screen.getByTitle('Dataset'));
+    await userEvent.click(screen.getByTitle('Dataset: eval (#1234-eval)'));
+    await userEvent.click(screen.getByTitle('No dataset'));
+    await userEvent.click(screen.getByTitle('Status'));
+    await userEvent.click(screen.getByTitle('Source run'));
+    await userEvent.click(screen.getByTitle('Dataset'));
 
     // However, now click on parameters group
-    await user.click(screen.getByTitle('Parameters'));
+    await userEvent.click(screen.getByTitle('Parameters'));
 
     // We should have only parameters hidden
     expect(currentColumnVisibility).toEqual({
@@ -117,7 +116,7 @@ describe('ExperimentLoggedModelListPageColumnSelector', () => {
     });
 
     // Retoggle parameters in the end
-    await user.click(screen.getByTitle('Parameters'));
+    await userEvent.click(screen.getByTitle('Parameters'));
 
     // We should have all columns visible again
     expect(currentColumnVisibility).toEqual({});

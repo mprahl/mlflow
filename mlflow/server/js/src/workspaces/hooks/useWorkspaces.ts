@@ -1,7 +1,7 @@
 import { useMemo, useEffect } from 'react';
 import { useQuery } from '@mlflow/mlflow/src/common/utils/reactQueryHooks';
-import { fetchAPI, getAjaxUrl, HTTPMethods } from '../utils/FetchUtils';
-import { setAvailableWorkspaces } from '../utils/WorkspaceUtils';
+import { fetchAPI, getAjaxUrl, HTTPMethods } from '../../common/utils/FetchUtils';
+import { setAvailableWorkspaces } from '../../workspaces/utils/WorkspaceUtils';
 
 type Workspace = {
   name: string;

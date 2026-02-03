@@ -14,7 +14,7 @@ import { first, orderBy } from 'lodash';
 import type { RunsChartsBarCardConfig } from '../../components/runs-charts/runs-charts.types';
 import type { RunsChartsRunData } from '../../components/runs-charts/components/RunsCharts.common';
 import { createMLflowRoutePath } from '../../../common/utils/RoutingUtils';
-import { prefixRouteWithWorkspace } from '../../../common/utils/WorkspaceUtils';
+import { prefixRouteWithWorkspace } from '../../../workspaces/utils/WorkspaceUtils';
 import { QueryClient, QueryClientProvider } from '@mlflow/mlflow/src/common/utils/reactQueryHooks';
 
 // eslint-disable-next-line no-restricted-syntax -- TODO(FEINF-4392)

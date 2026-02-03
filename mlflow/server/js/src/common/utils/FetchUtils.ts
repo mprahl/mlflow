@@ -11,7 +11,7 @@ import yaml from 'js-yaml';
 import { isNil, pickBy } from 'lodash';
 import { ErrorWrapper } from './ErrorWrapper';
 import { matchPredefinedError, matchPredefinedErrorFromResponse } from '@databricks/web-shared/errors';
-import { getActiveWorkspace } from './WorkspaceUtils';
+import { getActiveWorkspace } from '../../workspaces/utils/WorkspaceUtils';
 
 export const HTTPMethods = {
   GET: 'GET',
@@ -59,11 +59,7 @@ export const getDefaultHeaders = (cookieStr: any) => {
 };
 
 export const getAjaxUrl = (relativeUrl: any) => {
-  if (
-    process.env['MLFLOW_USE_ABSOLUTE_AJAX_URLS'] === 'true' &&
-    typeof relativeUrl === 'string' &&
-    !relativeUrl.startsWith('/')
-  ) {
+  if (process.env['MLFLOW_USE_ABSOLUTE_AJAX_URLS'] === 'true' && !relativeUrl.startsWith('/')) {
     return '/' + relativeUrl;
   }
   return relativeUrl;

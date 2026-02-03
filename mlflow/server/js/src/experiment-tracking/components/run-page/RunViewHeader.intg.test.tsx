@@ -8,7 +8,7 @@ import { ExperimentKind, ExperimentPageTabName } from '@mlflow/mlflow/src/experi
 import { EXPERIMENT_KIND_TAG_KEY } from '../../utils/ExperimentKindUtils';
 import { TestRouter, testRoute, waitForRoutesToBeRendered } from '@mlflow/mlflow/src/common/utils/RoutingTestUtils';
 import Routes from '../../routes';
-import { prefixRouteWithWorkspace } from '@mlflow/mlflow/src/common/utils/WorkspaceUtils';
+import { prefixRouteWithWorkspace } from '@mlflow/mlflow/src/workspaces/utils/WorkspaceUtils';
 
 jest.mock('../../../common/utils/FeatureUtils', () => ({
   shouldEnableExperimentPageHeaderV2: () => true,

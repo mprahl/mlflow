@@ -28,13 +28,13 @@ import { useSearchFilter } from './experiment-page/hooks/useSearchFilter';
 import { TagFilter, useTagsFilter } from './experiment-page/hooks/useTagsFilter';
 import { ExperimentListViewTagsFilter } from './experiment-page/components/ExperimentListViewTagsFilter';
 import { shouldEnableWorkspaces } from '../../common/utils/FeatureUtils';
-import { extractWorkspaceFromPathname } from '../../common/utils/WorkspaceUtils';
-import { useLocation } from '../../common/utils/RoutingUtils';
+import { extractWorkspaceFromSearchParams } from '../../workspaces/utils/WorkspaceUtils';
+import { useSearchParams } from '../../common/utils/RoutingUtils';
 
 export const ExperimentListView = () => {
-  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const workspacesEnabled = shouldEnableWorkspaces();
-  const workspaceFromUrl = extractWorkspaceFromPathname(location.pathname);
+  const workspaceFromUrl = extractWorkspaceFromSearchParams(searchParams);
   // Only show creation buttons when: workspaces are disabled OR a workspace is selected
   const showCreationButtons = !workspacesEnabled || workspaceFromUrl !== null;
 

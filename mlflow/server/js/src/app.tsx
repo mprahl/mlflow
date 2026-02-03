@@ -20,7 +20,7 @@ import { MlflowRouter as MlflowRouter } from './MlflowRouter';
 import { useMLflowDarkTheme } from './common/hooks/useMLflowDarkTheme';
 import { DarkThemeProvider } from './common/contexts/DarkThemeContext';
 import { telemetryClient } from './telemetry';
-import { subscribeToWorkspaceChanges } from './common/utils/WorkspaceUtils';
+import { subscribeToWorkspaceChanges } from './workspaces/utils/WorkspaceUtils';
 import { ServerFeaturesProvider, SERVER_FEATURES_QUERY_KEY } from './common/utils/ServerFeaturesContext';
 
 export function MLFlowRoot() {
@@ -33,11 +33,12 @@ export function MLFlowRoot() {
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const queryClient = useMemo(() => new QueryClient(), []);
 
-  // Clear caches when workspace changes instead of recreating clients
+  // Reset caches when workspace changes instead of recreating clients
   useEffect(() => {
     const unsubscribe = subscribeToWorkspaceChanges(() => {
-      // Clear React Query cache except server features (they don't change with workspace)
-      queryClient.removeQueries({
+      // Reset React Query cache except server features (they don't change with workspace)
+      // resetQueries removes cached data AND triggers refetch
+      queryClient.resetQueries({
         predicate: (query) => {
           // Keep server features cached
           return query.queryKey[0] !== SERVER_FEATURES_QUERY_KEY[0];

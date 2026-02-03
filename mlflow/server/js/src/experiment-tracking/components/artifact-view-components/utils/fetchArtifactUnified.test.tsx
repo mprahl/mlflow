@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, jest } from '@jes
 import { rest } from 'msw';
 import { setupServer } from '../../../../common/utils/setup-msw';
 import { fetchArtifactUnified } from './fetchArtifactUnified';
-import { setActiveWorkspace } from '../../../../common/utils/WorkspaceUtils';
+import { setActiveWorkspace } from '../../../../workspaces/utils/WorkspaceUtils';
 import { getWorkspacesEnabledSync } from '../../../../common/utils/ServerFeaturesContext';
 
 jest.mock('../../../../common/utils/ServerFeaturesContext', () => ({

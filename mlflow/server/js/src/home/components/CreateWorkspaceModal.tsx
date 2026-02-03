@@ -3,7 +3,7 @@ import { useForm, FormProvider } from 'react-hook-form';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { Alert, FormUI, Modal, RHFControlledComponents, Spacer } from '@databricks/design-system';
 import { fetchAPI, getAjaxUrl, HTTPMethods } from '../../common/utils/FetchUtils';
-import { validateWorkspaceName } from '../../common/utils/WorkspaceUtils';
+import { validateWorkspaceName } from '../../workspaces/utils/WorkspaceUtils';
 
 type CreateWorkspaceFormData = {
   workspaceName: string;

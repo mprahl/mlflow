@@ -8,7 +8,7 @@ import { DesignSystemProvider } from '@databricks/design-system';
 import type { KeyValueEntity } from '../../../common/types';
 import userEvent from '@testing-library/user-event';
 import type { RunPageModelVersionSummary } from './hooks/useUnifiedRegisteredModelVersionsSummariesForRun';
-import { prefixRouteWithWorkspace } from '../../../common/utils/WorkspaceUtils';
+import { prefixRouteWithWorkspace } from '../../../workspaces/utils/WorkspaceUtils';
 
 jest.mock('../../../model-registry/actions', () => ({
   searchRegisteredModelsApi: jest.fn(() => ({ type: 'MOCKED_ACTION', payload: Promise.resolve() })),

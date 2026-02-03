@@ -40,7 +40,12 @@ import { HashRouter as HashRouterV5, Link as LinkV5, NavLink as NavLinkV5 } from
 import type { ComponentProps } from 'react';
 import React, { useCallback } from 'react';
 
-import { prefixRouteWithWorkspace, getActiveWorkspace, isGlobalRoute, WORKSPACE_QUERY_PARAM } from './WorkspaceUtils';
+import {
+  prefixRouteWithWorkspace,
+  getActiveWorkspace,
+  isGlobalRoute,
+  WORKSPACE_QUERY_PARAM,
+} from '../../workspaces/utils/WorkspaceUtils';
 import { getWorkspacesEnabledSync } from './ServerFeaturesContext';
 
 const useLocation = useLocationDirect;

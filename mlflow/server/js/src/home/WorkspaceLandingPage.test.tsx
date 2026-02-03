@@ -4,13 +4,13 @@ import '@testing-library/jest-dom';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from '../common/utils/RoutingUtils';
 import WorkspaceLandingPage from './WorkspaceLandingPage';
-import { useWorkspaces } from '../common/hooks/useWorkspaces';
+import { useWorkspaces } from '../workspaces/hooks/useWorkspaces';
 import { renderWithIntl, screen } from '@mlflow/mlflow/src/common/utils/TestUtils.react18';
 import { QueryClient, QueryClientProvider } from '@mlflow/mlflow/src/common/utils/reactQueryHooks';
 
-jest.mock('../common/hooks/useWorkspaces');
-jest.mock('../common/utils/WorkspaceUtils', () => ({
-  ...jest.requireActual<typeof import('../common/utils/WorkspaceUtils')>('../common/utils/WorkspaceUtils'),
+jest.mock('../workspaces/hooks/useWorkspaces');
+jest.mock('../workspaces/utils/WorkspaceUtils', () => ({
+  ...jest.requireActual<typeof import('../workspaces/utils/WorkspaceUtils')>('../workspaces/utils/WorkspaceUtils'),
   getActiveWorkspace: jest.fn().mockReturnValue('default'),
   setActiveWorkspace: jest.fn(),
 }));
@@ -115,7 +115,6 @@ describe('WorkspaceLandingPage', () => {
   });
 
   test('opens create workspace modal when button clicked', async () => {
-    const user = userEvent.setup();
     renderComponent();
 
     await waitFor(() => {
@@ -123,7 +122,7 @@ describe('WorkspaceLandingPage', () => {
     });
 
     const createButton = screen.getByText('Create new workspace');
-    await user.click(createButton);
+    await userEvent.click(createButton);
 
     // Modal should open with title
     await waitFor(() => {

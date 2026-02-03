@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from '@jest/globals';
 
 import { getArtifactLocationUrl, getLoggedModelArtifactLocationUrl } from './ArtifactUtils';
-import { setActiveWorkspace } from './WorkspaceUtils';
+import { setActiveWorkspace } from '../../workspaces/utils/WorkspaceUtils';
 
 describe('ArtifactUtils workspace-aware URLs', () => {
   afterEach(() => {

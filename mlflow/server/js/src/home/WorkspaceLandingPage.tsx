@@ -4,7 +4,7 @@ import { FormattedMessage } from 'react-intl';
 import { ScrollablePageWrapper } from '../common/components/ScrollablePageWrapper';
 import { useCreateWorkspaceModal } from './components/CreateWorkspaceModal';
 import { useNavigate } from '../common/utils/RoutingUtils';
-import { setActiveWorkspace, WORKSPACE_QUERY_PARAM } from '../common/utils/WorkspaceUtils';
+import { setActiveWorkspace, WORKSPACE_QUERY_PARAM } from '../workspaces/utils/WorkspaceUtils';
 
 // Loaders and lazy imports for expensive components
 import LogTracesDrawerLoader from './components/LogTracesDrawerLoader';

@@ -8,13 +8,13 @@ import { PromptsListTable } from './components/PromptsListTable';
 import { useUpdateRegisteredPromptTags } from './hooks/useUpdateRegisteredPromptTags';
 import { CreatePromptModalMode, useCreatePromptModal } from './hooks/useCreatePromptModal';
 import Routes from '../../routes';
-import { useLocation, useNavigate } from '../../../common/utils/RoutingUtils';
+import { useNavigate, useSearchParams } from '../../../common/utils/RoutingUtils';
 import { withErrorBoundary } from '../../../common/utils/withErrorBoundary';
 import ErrorUtils from '../../../common/utils/ErrorUtils';
 import { PromptPageErrorHandler } from './components/PromptPageErrorHandler';
 import { useDebounce } from 'use-debounce';
 import { shouldEnableWorkspaces } from '../../../common/utils/FeatureUtils';
-import { extractWorkspaceFromPathname } from '../../../common/utils/WorkspaceUtils';
+import { extractWorkspaceFromSearchParams } from '../../../workspaces/utils/WorkspaceUtils';
 
 export type PromptsListComponentId =
   | 'mlflow.prompts.global.list.create'
@@ -53,9 +53,9 @@ const EXPERIMENT_COMPONENT_IDS: PromptsListComponentIds = {
 };
 
 const PromptsPage = ({ experimentId }: { experimentId?: string } = {}) => {
-  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const workspacesEnabled = shouldEnableWorkspaces();
-  const workspaceFromUrl = extractWorkspaceFromPathname(location.pathname);
+  const workspaceFromUrl = extractWorkspaceFromSearchParams(searchParams);
   // Only show creation buttons when: workspaces are disabled OR a workspace is selected
   const showCreationButtons = !workspacesEnabled || workspaceFromUrl !== null;
 

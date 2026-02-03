@@ -26,7 +26,7 @@ import { ModelListTable } from './model-list/ModelListTable';
 import { PageContainer } from '../../common/components/PageContainer';
 import { ModelsNextUIToggleSwitch } from './ModelsNextUIToggleSwitch';
 import { withNextModelsUIContext } from '../hooks/useNextModelsUI';
-import { extractWorkspaceFromPathname } from '../../common/utils/WorkspaceUtils';
+import { extractWorkspaceFromSearchParams } from '../../workspaces/utils/WorkspaceUtils';
 
 const NAME_COLUMN_INDEX = 'name';
 const LAST_MODIFIED_COLUMN_INDEX = 'last_updated_timestamp';
@@ -157,7 +157,8 @@ export class ModelListViewImpl extends React.Component<ModelListViewImplProps, M
 
     // Only show creation buttons when: workspaces are disabled OR a workspace is selected
     const workspacesEnabled = shouldEnableWorkspaces();
-    const workspaceFromUrl = extractWorkspaceFromPathname(window.location.pathname);
+    const searchParams = new URLSearchParams(window.location.search);
+    const workspaceFromUrl = extractWorkspaceFromSearchParams(searchParams);
     const showCreationButtons = !workspacesEnabled || workspaceFromUrl !== null;
 
     const title = (

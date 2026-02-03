@@ -1,5 +1,5 @@
 import { matchPredefinedError } from '@databricks/web-shared/errors';
-import { getActiveWorkspace } from '@mlflow/mlflow/src/common/utils/WorkspaceUtils';
+import { getActiveWorkspace } from '@mlflow/mlflow/src/workspaces/utils/WorkspaceUtils';
 
 // eslint-disable-next-line no-restricted-globals -- See go/spog-fetch
 const fetchFn = fetch;

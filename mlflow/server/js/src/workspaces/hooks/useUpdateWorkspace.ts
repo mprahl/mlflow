@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@mlflow/mlflow/src/common/utils/reactQueryHooks';
-import { fetchAPI, getAjaxUrl, HTTPMethods } from '../utils/FetchUtils';
+import { fetchAPI, getAjaxUrl, HTTPMethods } from '../../common/utils/FetchUtils';
 
 type UpdateWorkspaceParams = {
   name: string;
