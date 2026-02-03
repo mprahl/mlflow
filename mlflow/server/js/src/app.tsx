@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { ApolloProvider } from '@mlflow/mlflow/src/common/utils/graphQLHooks';
 import { RawIntlProvider } from 'react-intl';
 
@@ -20,8 +20,8 @@ import { MlflowRouter as MlflowRouter } from './MlflowRouter';
 import { useMLflowDarkTheme } from './common/hooks/useMLflowDarkTheme';
 import { DarkThemeProvider } from './common/contexts/DarkThemeContext';
 import { telemetryClient } from './telemetry';
-import { subscribeToWorkspaceChanges } from './workspaces/utils/WorkspaceUtils';
 import { ServerFeaturesProvider, SERVER_FEATURES_QUERY_KEY } from './common/utils/ServerFeaturesContext';
+import { subscribeToWorkspaceChanges } from './workspaces/utils/WorkspaceUtils';
 
 export function MLFlowRoot() {
   // eslint-disable-next-line react-hooks/rules-of-hooks

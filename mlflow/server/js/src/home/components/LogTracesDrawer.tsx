@@ -14,9 +14,9 @@ import { TraceTableGenericQuickstart } from '@mlflow/mlflow/src/experiment-track
 import type { QUICKSTART_FLAVOR } from '@mlflow/mlflow/src/experiment-tracking/components/traces/quickstart/TraceTableQuickstart.utils';
 import { CopyButton } from '@mlflow/mlflow/src/shared/building_blocks/CopyButton';
 import { CodeSnippet } from '@databricks/web-shared/snippet';
-import { Link } from '../../common/utils/RoutingUtils';
+import { Link, useSearchParams } from '../../common/utils/RoutingUtils';
 import Routes from '../../experiment-tracking/routes';
-import { getActiveWorkspace } from '../../workspaces/utils/WorkspaceUtils';
+import { extractWorkspaceFromSearchParams } from '../../workspaces/utils/WorkspaceUtils';
 import OpenAiLogo from '../../common/static/logos/openai.svg';
 import OpenAiLogoDark from '../../common/static/logos/openai-dark.svg';
 import LangChainLogo from '../../common/static/logos/langchain.svg';
@@ -121,7 +121,8 @@ export const LogTracesDrawer = () => {
   const { theme } = useDesignSystemTheme();
   const [selectedFramework, setSelectedFramework] = useState<SupportedQuickstartFlavor>('openai');
   const { isLogTracesDrawerOpen, closeLogTracesDrawer } = useHomePageViewState();
-  const activeWorkspace = getActiveWorkspace();
+  const [searchParams] = useSearchParams();
+  const activeWorkspace = extractWorkspaceFromSearchParams(searchParams);
   const configureSnippet = getConfigureExperimentSnippet(activeWorkspace);
 
   const handleOpenChange = (open: boolean) => {

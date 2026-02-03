@@ -3,6 +3,19 @@ import { getWorkspacesEnabledSync } from '../../common/utils/ServerFeaturesConte
 const WORKSPACE_STORAGE_KEY = 'mlflow.activeWorkspace';
 export const WORKSPACE_QUERY_PARAM = 'workspace';
 
+let activeWorkspace: string | null = null;
+const listeners = new Set<(workspace: string | null) => void>();
+
+export const getActiveWorkspace = () => activeWorkspace;
+
+export const setActiveWorkspace = (workspace: string | null) => {
+  activeWorkspace = workspace;
+  listeners.forEach((listener) => listener(activeWorkspace));
+  if (workspace) {
+    setLastUsedWorkspace(workspace);
+  }
+};
+
 /**
  * Get the last used workspace from localStorage.
  * Used for UI hints like the "Last used" badge.
@@ -18,35 +31,20 @@ export const getLastUsedWorkspace = (): string | null => {
   }
 };
 
-let activeWorkspace: string | null = getLastUsedWorkspace();
-let availableWorkspaces: string[] = [];
-
-const listeners = new Set<(workspace: string | null) => void>();
-
-/**
- * Get the active workspace from the URL query param (source of truth).
- * Never falls back to localStorage to avoid stale workspace bugs.
- * Returns null when no workspace is in the URL (e.g., workspace selector).
- * For UI hints use getLastUsedWorkspace() instead.
- */
-export const getActiveWorkspace = () => {
-  if (!getWorkspacesEnabledSync()) {
-    return null;
-  }
-
-  if (typeof window !== 'undefined' && window.location?.search !== undefined) {
-    return extractWorkspaceFromSearchParams(window.location.search);
-  }
-
-  return null;
+/** Subscribe to workspace changes. Returns unsubscribe function. */
+export const subscribeToWorkspaceChanges = (listener: (workspace: string | null) => void) => {
+  listeners.add(listener);
+  listener(getActiveWorkspace());
+  return () => {
+    listeners.delete(listener);
+  };
 };
 
 /**
  * Set the active workspace in localStorage and notify listeners.
  * Used for syncing state with URL and for UI hints via getLastUsedWorkspace().
  */
-export const setActiveWorkspace = (workspace: string | null) => {
-  activeWorkspace = workspace;
+export const setLastUsedWorkspace = (workspace: string | null) => {
   if (typeof window !== 'undefined') {
     try {
       if (workspace) {
@@ -58,7 +56,6 @@ export const setActiveWorkspace = (workspace: string | null) => {
       // no-op: localStorage might be unavailable (e.g., private browsing)
     }
   }
-  listeners.forEach((listener) => listener(activeWorkspace));
 };
 
 // Workspace name validation constants (must match backend: mlflow/store/workspace/abstract_store.py)
@@ -105,21 +102,6 @@ export const extractWorkspaceFromSearchParams = (search: string | URLSearchParam
 
   return workspaceName;
 };
-
-/** Subscribe to workspace changes. Returns unsubscribe function. */
-export const subscribeToWorkspaceChanges = (listener: (workspace: string | null) => void) => {
-  listeners.add(listener);
-  listener(getActiveWorkspace());
-  return () => {
-    listeners.delete(listener);
-  };
-};
-
-export const setAvailableWorkspaces = (workspaces: string[]) => {
-  availableWorkspaces = workspaces;
-};
-
-export const getAvailableWorkspaces = () => availableWorkspaces;
 
 const isAbsoluteUrl = (value: string) => /^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(value);
 

@@ -49,6 +49,13 @@ describe('FetchUtils', () => {
   beforeAll(() => {
     getWorkspacesEnabledSyncMock.mockReturnValue(true);
     setActiveWorkspace('default');
+
+    // Mock window.location to include workspace query param using Object.defineProperty
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      writable: true,
+      value: new URL('http://localhost:5000/?workspace=default'),
+    });
   });
 
   afterAll(() => {
@@ -69,6 +76,12 @@ describe('FetchUtils', () => {
   describe('getDefaultHeaders', () => {
     afterEach(() => {
       setActiveWorkspace(null);
+      // Restore default workspace in mocked location
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        writable: true,
+        value: new URL('http://localhost:5000/?workspace=default'),
+      });
     });
 
     it('includes default workspace header when none selected', () => {
@@ -77,6 +90,12 @@ describe('FetchUtils', () => {
 
     it('includes active workspace header when selected', () => {
       setActiveWorkspace('team-a');
+      // Update mocked location to reflect the new workspace
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        writable: true,
+        value: new URL('http://localhost:5000/?workspace=team-a'),
+      });
       expect(getDefaultHeaders('')).toMatchObject({ 'X-MLFLOW-WORKSPACE': 'team-a' });
     });
   });
@@ -136,6 +155,12 @@ describe('FetchUtils', () => {
     beforeEach(() => {
       // Ensure workspace is set for these tests (may be cleared by other tests)
       setActiveWorkspace('default');
+      // Update mocked location to include workspace query param
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        writable: true,
+        value: new URL('http://localhost:5000/?workspace=default'),
+      });
       mockResponse = {
         ok: true,
         status: 200,
@@ -426,6 +451,12 @@ describe('FetchUtils', () => {
     beforeEach(() => {
       // Ensure workspace is set for these tests (may be cleared by other tests)
       setActiveWorkspace('default');
+      // Update mocked location to include workspace query param
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        writable: true,
+        value: new URL('http://localhost:5000/?workspace=default'),
+      });
       mockResponse = {
         ok: true,
         status: 200,

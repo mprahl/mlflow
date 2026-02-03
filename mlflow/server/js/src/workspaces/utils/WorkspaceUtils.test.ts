@@ -4,9 +4,6 @@ import {
   getLastUsedWorkspace,
   setActiveWorkspace,
   extractWorkspaceFromSearchParams,
-  subscribeToWorkspaceChanges,
-  setAvailableWorkspaces,
-  getAvailableWorkspaces,
   prefixRouteWithWorkspace,
   appendWorkspaceSearchParams,
   validateWorkspaceName,
@@ -14,7 +11,6 @@ import {
   removeWorkspaceQueryParam,
   WORKSPACE_NAME_MIN_LENGTH,
   WORKSPACE_NAME_MAX_LENGTH,
-  WORKSPACE_QUERY_PARAM,
 } from './WorkspaceUtils';
 import { getWorkspacesEnabledSync } from '../../common/utils/ServerFeaturesContext';
 
@@ -92,7 +88,6 @@ describe('WorkspaceUtils', () => {
     getWorkspacesEnabledSyncMock.mockReturnValue(true);
     // Clear any stored workspace
     setActiveWorkspace(null);
-    setAvailableWorkspaces([]);
     // Clear localStorage
     if (typeof window !== 'undefined') {
       window.localStorage.clear();
@@ -101,7 +96,6 @@ describe('WorkspaceUtils', () => {
 
   afterEach(() => {
     setActiveWorkspace(null);
-    setAvailableWorkspaces([]);
   });
 
   describe('getLastUsedWorkspace', () => {
@@ -127,17 +121,17 @@ describe('WorkspaceUtils', () => {
       expect(getActiveWorkspace()).toBeNull();
     });
 
-    it('returns null when window.location is unavailable (SSR) - no fallback', () => {
+    it('returns the in-memory workspace even when window.location is unavailable (SSR)', () => {
       setActiveWorkspace('team-a');
 
       // Mock SSR environment (no window.location)
       const originalLocation = window.location;
       delete (window as any).location;
 
-      // getActiveWorkspace should return null, NOT fall back to localStorage
-      expect(getActiveWorkspace()).toBeNull();
+      // getActiveWorkspace returns in-memory value regardless of window.location
+      expect(getActiveWorkspace()).toBe('team-a');
 
-      // But getLastUsedWorkspace should still work
+      // And getLastUsedWorkspace should also work
       (window as any).location = originalLocation;
       expect(getLastUsedWorkspace()).toBe('team-a');
     });
@@ -148,30 +142,20 @@ describe('WorkspaceUtils', () => {
       expect(stored).toBe('team-b');
     });
 
-    it('removes from localStorage when setting to null', () => {
+    it('clears in-memory workspace but leaves localStorage intact when setting to null', () => {
       setActiveWorkspace('team-c');
       expect(window.localStorage.getItem('mlflow.activeWorkspace')).toBe('team-c');
+      expect(getActiveWorkspace()).toBe('team-c');
 
+      // setActiveWorkspace(null) clears in-memory but doesn't clear localStorage
+      // (localStorage keeps last used workspace for UI hints)
       setActiveWorkspace(null);
-      expect(window.localStorage.getItem('mlflow.activeWorkspace')).toBeNull();
+      expect(getActiveWorkspace()).toBeNull();
+      expect(window.localStorage.getItem('mlflow.activeWorkspace')).toBe('team-c');
     });
 
-    it('notifies listeners when workspace changes', () => {
-      const listener = jest.fn();
-      subscribeToWorkspaceChanges(listener);
-
-      // Initial call
-      expect(listener).toHaveBeenCalledWith(null);
-
-      setActiveWorkspace('team-d');
-      expect(listener).toHaveBeenCalledWith('team-d');
-
-      setActiveWorkspace('team-e');
-      expect(listener).toHaveBeenCalledWith('team-e');
-    });
-
-    it('returns null when URL has no workspace param - no fallback to localStorage', () => {
-      // Set localStorage
+    it('returns in-memory workspace regardless of URL params', () => {
+      // Set active workspace in memory
       setActiveWorkspace('cached-workspace');
 
       // Mock URL with no workspace param
@@ -179,8 +163,8 @@ describe('WorkspaceUtils', () => {
       delete (window as any).location;
       (window as any).location = { ...originalLocation, search: '?other=param' };
 
-      // Should return null, NOT fall back to localStorage
-      expect(getActiveWorkspace()).toBeNull();
+      // getActiveWorkspace returns in-memory value, doesn't read from URL
+      expect(getActiveWorkspace()).toBe('cached-workspace');
 
       // Restore original location
       (window as any).location = originalLocation;
@@ -280,89 +264,30 @@ describe('WorkspaceUtils', () => {
     });
   });
 
-  describe('subscribeToWorkspaceChanges', () => {
-    let originalLocation: Location;
-
-    beforeEach(() => {
-      originalLocation = window.location;
-    });
-
-    afterEach(() => {
-      (window as any).location = originalLocation;
-    });
-
-    it('calls listener immediately with current workspace from URL', () => {
-      // Mock URL with workspace param
-      delete (window as any).location;
-      (window as any).location = { ...originalLocation, search: '?workspace=from-url' };
-
-      const listener = jest.fn();
-      subscribeToWorkspaceChanges(listener);
-
-      // Should call with value from URL, not localStorage cache
-      expect(listener).toHaveBeenCalledWith('from-url');
-    });
-
-    it('calls listener when workspace changes', () => {
-      const listener = jest.fn();
-      subscribeToWorkspaceChanges(listener);
-
-      listener.mockClear();
-
-      setActiveWorkspace('changed');
-      expect(listener).toHaveBeenCalledWith('changed');
-    });
-
-    it('returns unsubscribe function that removes listener', () => {
-      const listener = jest.fn();
-      const unsubscribe = subscribeToWorkspaceChanges(listener);
-
-      listener.mockClear();
-      unsubscribe();
-
-      setActiveWorkspace('should-not-notify');
-      expect(listener).not.toHaveBeenCalled();
-    });
-  });
-
   describe('getActiveWorkspace', () => {
-    it('returns the active workspace from URL', () => {
+    it('returns the in-memory active workspace', () => {
       expect(getActiveWorkspace()).toBeNull();
 
-      // Mock URL with workspace param
-      const originalLocation = window.location;
-      delete (window as any).location;
-      (window as any).location = { ...originalLocation, search: '?workspace=workspace-1' };
-
+      setActiveWorkspace('workspace-1');
       expect(getActiveWorkspace()).toBe('workspace-1');
 
-      // Restore
-      (window as any).location = originalLocation;
-    });
-  });
+      setActiveWorkspace('another-workspace');
+      expect(getActiveWorkspace()).toBe('another-workspace');
 
-  describe('getAvailableWorkspaces / setAvailableWorkspaces', () => {
-    it('gets and sets available workspaces', () => {
-      expect(getAvailableWorkspaces()).toEqual([]);
-
-      setAvailableWorkspaces(['default', 'team-a']);
-      expect(getAvailableWorkspaces()).toEqual(['default', 'team-a']);
+      setActiveWorkspace(null);
+      expect(getActiveWorkspace()).toBeNull();
     });
   });
 
   describe('prefixRouteWithWorkspace', () => {
-    let originalLocation: Location;
-
     beforeEach(() => {
-      // Mock URL with workspace param so getActiveWorkspace() returns 'default'
-      originalLocation = window.location;
-      delete (window as any).location;
-      (window as any).location = { ...originalLocation, search: '?workspace=default' };
+      // Set active workspace for these tests
+      setActiveWorkspace('default');
     });
 
     afterEach(() => {
-      // Restore original location
-      (window as any).location = originalLocation;
+      // Clear active workspace
+      setActiveWorkspace(null);
     });
 
     it('returns original string for empty/undefined values', () => {
@@ -414,8 +339,7 @@ describe('WorkspaceUtils', () => {
     });
 
     it('returns path without workspace param when no workspace set', () => {
-      // Mock URL with no workspace param
-      (window as any).location = { ...originalLocation, search: '' };
+      setActiveWorkspace(null);
       expect(prefixRouteWithWorkspace('/experiments')).toBe('/experiments');
     });
 
@@ -425,8 +349,7 @@ describe('WorkspaceUtils', () => {
     });
 
     it('does not add workspace param to root path when no workspace is active', () => {
-      // Mock URL with no workspace param
-      (window as any).location = { ...originalLocation, search: '' };
+      setActiveWorkspace(null);
       expect(prefixRouteWithWorkspace('/')).toBe('/');
     });
 
@@ -441,31 +364,25 @@ describe('WorkspaceUtils', () => {
     });
 
     it('uses different workspace when set', () => {
-      // Mock URL with different workspace
-      (window as any).location = { ...originalLocation, search: '?workspace=team-a' };
+      setActiveWorkspace('team-a');
       expect(prefixRouteWithWorkspace('/experiments')).toBe('/experiments?workspace=team-a');
     });
 
     it('encodes workspace name in query param', () => {
-      // Mock URL with workspace containing hyphen
-      (window as any).location = { ...originalLocation, search: '?workspace=team-with-hyphen' };
+      setActiveWorkspace('team-with-hyphen');
       expect(prefixRouteWithWorkspace('/experiments')).toBe('/experiments?workspace=team-with-hyphen');
     });
   });
 
   describe('prefixPathnameWithWorkspace', () => {
-    let originalLocation: Location;
-
     beforeEach(() => {
-      // Mock URL with workspace param so getActiveWorkspace() returns 'default'
-      originalLocation = window.location;
-      delete (window as any).location;
-      (window as any).location = { ...originalLocation, search: '?workspace=default' };
+      // Set active workspace for these tests
+      setActiveWorkspace('default');
     });
 
     afterEach(() => {
-      // Restore original location
-      (window as any).location = originalLocation;
+      // Clear active workspace
+      setActiveWorkspace(null);
     });
 
     it('returns undefined for undefined pathname', () => {
@@ -486,13 +403,11 @@ describe('WorkspaceUtils', () => {
     });
 
     it('returns root path unchanged when no workspace is active', () => {
-      // Mock URL with no workspace param
-      (window as any).location = { ...originalLocation, search: '' };
+      setActiveWorkspace(null);
       expect(appendWorkspaceSearchParams('/')).toBe('/');
     });
 
     it('returns always-global routes unchanged (settings)', () => {
-      // Already mocked in beforeEach with workspace=default
       expect(appendWorkspaceSearchParams('/settings')).toBe('/settings');
     });
 
@@ -502,14 +417,12 @@ describe('WorkspaceUtils', () => {
     });
 
     it('uses active workspace when set', () => {
-      // Mock URL with different workspace
-      (window as any).location = { ...originalLocation, search: '?workspace=team-b' };
+      setActiveWorkspace('team-b');
       expect(appendWorkspaceSearchParams('/models')).toBe('/models?workspace=team-b');
     });
 
     it('returns pathname unchanged when no workspace set', () => {
-      // Mock URL with no workspace param
-      (window as any).location = { ...originalLocation, search: '' };
+      setActiveWorkspace(null);
       expect(appendWorkspaceSearchParams('/experiments')).toBe('/experiments');
     });
   });

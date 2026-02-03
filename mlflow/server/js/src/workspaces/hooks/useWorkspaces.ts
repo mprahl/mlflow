@@ -1,7 +1,6 @@
 import { useMemo, useEffect } from 'react';
 import { useQuery } from '@mlflow/mlflow/src/common/utils/reactQueryHooks';
 import { fetchAPI, getAjaxUrl, HTTPMethods } from '../../common/utils/FetchUtils';
-import { setAvailableWorkspaces } from '../../workspaces/utils/WorkspaceUtils';
 
 type Workspace = {
   name: string;
@@ -54,15 +53,6 @@ export const useWorkspaces = (enabled: boolean) => {
     }
     return filteredWorkspaces;
   }, [data]);
-
-  // Store available workspaces for access validation
-  useEffect(() => {
-    if (workspaces.length > 0) {
-      setAvailableWorkspaces(workspaces.map((w) => w.name));
-    } else if (!isLoading) {
-      setAvailableWorkspaces([]);
-    }
-  }, [workspaces, isLoading]);
 
   return {
     workspaces,

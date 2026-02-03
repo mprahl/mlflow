@@ -13,6 +13,7 @@ import {
   useNavigate,
   useParams,
   usePageTitle,
+  useSearchParams,
 } from './common/utils/RoutingUtils';
 import { MlflowHeader } from './common/components/MlflowHeader';
 import { useDarkThemeContext } from './common/contexts/DarkThemeContext';
@@ -29,10 +30,9 @@ import { AssistantProvider, AssistantRouteContextProvider } from './assistant';
 import { RootAssistantLayout } from './common/components/RootAssistantLayout';
 import {
   extractWorkspaceFromSearchParams,
-  setActiveWorkspace,
   getActiveWorkspace,
   isGlobalRoute,
-  WORKSPACE_QUERY_PARAM,
+  setActiveWorkspace,
 } from './workspaces/utils/WorkspaceUtils';
 import { useWorkspaces } from './workspaces/hooks/useWorkspaces';
 
@@ -111,6 +111,7 @@ const MlflowRootRoute = () => {
 
 const WorkspaceRouterSync = ({ workspacesEnabled }: { workspacesEnabled: boolean }) => {
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate({ bypassWorkspacePrefix: true });
   // Note: We fetch workspaces for validation but don't block on it
   // The workspace list might be stale, so we trust the URL workspace param
@@ -123,7 +124,7 @@ const WorkspaceRouterSync = ({ workspacesEnabled }: { workspacesEnabled: boolean
     }
 
     // Extract workspace from query param
-    const workspaceFromQuery = extractWorkspaceFromSearchParams(location.search);
+    const workspaceFromQuery = extractWorkspaceFromSearchParams(searchParams);
     const activeWorkspace = getActiveWorkspace();
     const isRootPath = location.pathname === '/' || location.pathname === '';
 
@@ -152,7 +153,7 @@ const WorkspaceRouterSync = ({ workspacesEnabled }: { workspacesEnabled: boolean
     // No workspace query param on a workspace-scoped route - redirect to selector (Option 2)
     setActiveWorkspace(null);
     navigate('/', { replace: true });
-  }, [location, navigate, workspacesEnabled]);
+  }, [location, navigate, workspacesEnabled, searchParams]);
 
   return null;
 };

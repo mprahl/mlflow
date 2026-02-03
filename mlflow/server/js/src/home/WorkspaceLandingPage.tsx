@@ -52,7 +52,6 @@ const WorkspaceLandingPage = () => {
 };
 
 const HomePageSectionSkeleton = () => {
-  const { theme } = useDesignSystemTheme();
   return (
     <div>
       <TitleSkeleton />

@@ -11,7 +11,8 @@ import {
 import { FormattedMessage } from 'react-intl';
 import { CodeSnippet } from '@databricks/web-shared/snippet';
 import { CopyButton } from '../../../shared/building_blocks/CopyButton';
-import { getActiveWorkspace } from '../../../workspaces/utils/WorkspaceUtils';
+import { extractWorkspaceFromSearchParams } from '../../../workspaces/utils/WorkspaceUtils';
+import { useSearchParams } from '../../../common/utils/RoutingUtils';
 
 type Props = {
   isOpen: boolean;
@@ -100,7 +101,8 @@ mlflow.end_run()`.trimStart();
 
 export const CreateNotebookRunModal = ({ isOpen, closeModal, experimentId }: Props): JSX.Element => {
   const { theme } = useDesignSystemTheme();
-  const activeWorkspace = getActiveWorkspace();
+  const [searchParams] = useSearchParams();
+  const activeWorkspace = extractWorkspaceFromSearchParams(searchParams);
 
   const codeSnippetTheme = theme.isDarkMode ? 'duotoneDark' : 'light';
 

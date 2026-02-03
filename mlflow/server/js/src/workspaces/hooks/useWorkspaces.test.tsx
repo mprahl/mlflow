@@ -4,7 +4,6 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClientProvider, QueryClient } from '@databricks/web-shared/query-client';
 
 import { useWorkspaces } from './useWorkspaces';
-import { getAvailableWorkspaces } from '../../workspaces/utils/WorkspaceUtils';
 import { fetchAPI } from '../../common/utils/FetchUtils';
 
 jest.mock('../../common/utils/FetchUtils', () => ({
@@ -123,39 +122,6 @@ describe('useWorkspaces', () => {
     expect(result.current.workspaces).toHaveLength(2);
     expect(result.current.workspaces[0].name).toBe('valid-workspace');
     expect(result.current.workspaces[1].name).toBe('another-valid');
-  });
-
-  it('calls setAvailableWorkspaces with workspace names after fetch', async () => {
-    fetchAPIMock.mockResolvedValue({
-      workspaces: [
-        { name: 'workspace-1', description: 'First' },
-        { name: 'workspace-2', description: 'Second' },
-      ],
-    });
-
-    const { result } = renderHook(() => useWorkspaces(true), { wrapper });
-
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
-    // Check that available workspaces were set
-    const availableWorkspaces = getAvailableWorkspaces();
-    expect(availableWorkspaces).toEqual(['workspace-1', 'workspace-2']);
-  });
-
-  it('sets available workspaces to empty array when no workspaces returned', async () => {
-    fetchAPIMock.mockResolvedValue({ workspaces: [] });
-
-    const { result } = renderHook(() => useWorkspaces(true), { wrapper });
-
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
-    expect(result.current.workspaces).toEqual([]);
-    const availableWorkspaces = getAvailableWorkspaces();
-    expect(availableWorkspaces).toEqual([]);
   });
 
   it('does not send X-MLFLOW-WORKSPACE header in request', async () => {
