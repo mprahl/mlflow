@@ -5,33 +5,41 @@ import userEvent from '@testing-library/user-event';
 import { WorkspacesHomeView } from './WorkspacesHomeView';
 import { useWorkspaces } from '../../workspaces/hooks/useWorkspaces';
 import { getLastUsedWorkspace } from '../../workspaces/utils/WorkspaceUtils';
-import { renderWithIntl, screen } from '@mlflow/mlflow/src/common/utils/TestUtils.react18';
+import { useUpdateWorkspace } from '../../workspaces/hooks/useUpdateWorkspace';
+import { renderWithIntl, screen, waitFor } from '@mlflow/mlflow/src/common/utils/TestUtils.react18';
 import { MemoryRouter } from '../../common/utils/RoutingUtils';
 import { QueryClient, QueryClientProvider } from '@mlflow/mlflow/src/common/utils/reactQueryHooks';
 
 jest.mock('../../workspaces/hooks/useWorkspaces');
-jest.mock('../../workspaces/utils/WorkspaceUtils');
+jest.mock('../../workspaces/hooks/useUpdateWorkspace');
+jest.mock('../../workspaces/utils/WorkspaceUtils', () => {
+  const actualWorkspaceUtils = jest.requireActual<typeof import('../../workspaces/utils/WorkspaceUtils')>(
+    '../../workspaces/utils/WorkspaceUtils',
+  );
+  return {
+    ...actualWorkspaceUtils,
+    getLastUsedWorkspace: jest.fn(),
+    setLastUsedWorkspace: jest.fn(),
+  };
+});
 
 const reloadMock = jest.fn();
-
-const mockNavigate = jest.fn();
-jest.mock('../../common/utils/RoutingUtils', () => ({
-  ...jest.requireActual<typeof import('../../common/utils/RoutingUtils')>('../../common/utils/RoutingUtils'),
-  useNavigate: () => mockNavigate,
-}));
+const mockUpdateWorkspace = jest.fn();
 
 describe('WorkspacesHomeView', () => {
   const mockOnCreateWorkspace = jest.fn();
 
   beforeEach(() => {
     jest.clearAllMocks();
-    // Mock last used workspace for "Last used" badge
     jest.mocked(getLastUsedWorkspace).mockReturnValue('ml-research');
-
     Object.defineProperty(window, 'location', {
-      value: { ...window.location, reload: reloadMock },
+      value: { ...window.location, hash: '', reload: reloadMock },
       writable: true,
     });
+    jest.mocked(useUpdateWorkspace).mockReturnValue({
+      mutate: mockUpdateWorkspace,
+      isLoading: false,
+    } as any);
   });
 
   afterEach(() => {
@@ -90,8 +98,7 @@ describe('WorkspacesHomeView', () => {
     });
 
     renderComponent();
-    const createButton = screen.getByText('Create workspace');
-    await userEvent.click(createButton);
+    await userEvent.click(screen.getByText('Create workspace'));
     expect(mockOnCreateWorkspace).toHaveBeenCalledTimes(1);
   });
 
@@ -114,8 +121,6 @@ describe('WorkspacesHomeView', () => {
     expect(screen.getByText('production-models')).toBeInTheDocument();
     expect(screen.getByText('Production-ready models')).toBeInTheDocument();
     expect(screen.getByText('data-science-team')).toBeInTheDocument();
-
-    // Last used badge should appear for ml-research
     expect(screen.getByText('Last used')).toBeInTheDocument();
   });
 
@@ -129,10 +134,8 @@ describe('WorkspacesHomeView', () => {
 
     renderComponent();
 
-    const workspaceLink = screen.getByText('ml-research');
-    await userEvent.click(workspaceLink);
+    await userEvent.click(screen.getByText('ml-research'));
 
-    // Hard reload with workspace query param
     expect(window.location.hash).toBe('#/?workspace=ml-research');
     expect(window.location.reload).toHaveBeenCalled();
   });
@@ -147,10 +150,8 @@ describe('WorkspacesHomeView', () => {
 
     renderComponent();
 
-    const workspaceLink = screen.getByText('team-a/special');
-    await userEvent.click(workspaceLink);
+    await userEvent.click(screen.getByText('team-a/special'));
 
-    // Hard reload with encoded workspace query param
     expect(window.location.hash).toBe('#/?workspace=team-a%2Fspecial');
     expect(window.location.reload).toHaveBeenCalled();
   });
@@ -165,6 +166,89 @@ describe('WorkspacesHomeView', () => {
 
     renderComponent();
     expect(screen.getByText('Create new workspace')).toBeInTheDocument();
+  });
+
+  test('opens edit modal with workspace fields', async () => {
+    jest.mocked(useWorkspaces).mockReturnValue({
+      workspaces: [
+        {
+          name: 'ml-research',
+          description: 'Research experiments',
+          default_artifact_root: 's3://artifacts/ml-research',
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn() as any,
+    });
+
+    renderComponent();
+    await userEvent.click(screen.getByRole('button', { name: 'Edit workspace' }));
+
+    expect(screen.getByText('Edit Workspace')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Research experiments')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('s3://artifacts/ml-research')).toBeInTheDocument();
+  });
+
+  test('saves updated fields from the edit modal', async () => {
+    mockUpdateWorkspace.mockImplementation((_variables, options: any) => {
+      options?.onSuccess?.({} as any, undefined as any, undefined as any);
+    });
+    jest.mocked(useWorkspaces).mockReturnValue({
+      workspaces: [
+        {
+          name: 'ml-research',
+          description: 'Research experiments',
+          default_artifact_root: 's3://artifacts/ml-research',
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn() as any,
+    });
+
+    renderComponent();
+    await userEvent.click(screen.getByRole('button', { name: 'Edit workspace' }));
+    await userEvent.clear(screen.getByDisplayValue('Research experiments'));
+    await userEvent.type(screen.getByPlaceholderText('Enter workspace description'), 'Updated description');
+    await userEvent.clear(screen.getByDisplayValue('s3://artifacts/ml-research'));
+    await userEvent.type(screen.getByPlaceholderText('Enter default artifact root URI'), 's3://artifacts/new-team');
+
+    await userEvent.click(screen.getByText('Save'));
+
+    await waitFor(() => {
+      expect(mockUpdateWorkspace).toHaveBeenCalledWith(
+        {
+          name: 'ml-research',
+          description: 'Updated description',
+          default_artifact_root: 's3://artifacts/new-team',
+        },
+        expect.objectContaining({
+          onSuccess: expect.any(Function),
+          onError: expect.any(Function),
+        }),
+      );
+    });
+  });
+
+  test('shows an inline error when saving the edit modal fails', async () => {
+    mockUpdateWorkspace.mockImplementation((_variables, options: any) => {
+      options?.onError?.(new Error('Save failed'));
+    });
+    jest.mocked(useWorkspaces).mockReturnValue({
+      workspaces: [{ name: 'ml-research', description: 'Research experiments' }],
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn() as any,
+    });
+
+    renderComponent();
+    await userEvent.click(screen.getByRole('button', { name: 'Edit workspace' }));
+    await userEvent.clear(screen.getByDisplayValue('Research experiments'));
+    await userEvent.type(screen.getByPlaceholderText('Enter workspace description'), 'Updated description');
+    await userEvent.click(screen.getByText('Save'));
+
+    expect(await screen.findByText('Save failed')).toBeInTheDocument();
   });
 
   test('renders error state', () => {
@@ -191,8 +275,7 @@ describe('WorkspacesHomeView', () => {
     });
 
     renderComponent();
-    const retryButton = screen.getByText('Retry');
-    await userEvent.click(retryButton);
+    await userEvent.click(screen.getByText('Retry'));
     expect(mockRefetch).toHaveBeenCalledTimes(1);
   });
 });
