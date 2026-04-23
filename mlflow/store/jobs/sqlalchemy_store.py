@@ -93,7 +93,7 @@ class SqlAlchemyJobStore(AbstractJobStore):
         # should still apply the resulting field updates atomically.
         job.lease_expires_at = None
         job.status_message = None
-        job.progress_payload = None
+        job.progress = None
         job.progress_updated_at = None
         job.token_hash = None
         job.scoped_permissions = None
@@ -473,7 +473,7 @@ class SqlAlchemyJobStore(AbstractJobStore):
             job.status_details = current_details
             job.last_update_time = get_current_time_millis()
 
-    def report_job_progress(
+    def update_job_progress(
         self,
         job_id: str,
         message: str | None = None,
@@ -500,6 +500,6 @@ class SqlAlchemyJobStore(AbstractJobStore):
             serialized_progress = progress.to_dict() if progress is not None else None
 
             job.status_message = message
-            job.progress_payload = serialized_progress
+            job.progress = serialized_progress
             job.progress_updated_at = update_time
             job.last_update_time = update_time

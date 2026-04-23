@@ -174,7 +174,7 @@ class AbstractJobStore(ABC):
             status_details: Status details to merge into existing job status details
         """
 
-    def report_job_progress(
+    def update_job_progress(
         self,
         job_id: str,
         message: str | None = None,

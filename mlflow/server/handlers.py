@@ -4279,9 +4279,7 @@ def _get_job(job_id):
         "error_message": job.error_message,
         "status_details": job.status_details,
         "status_message": job.status_message,
-        "progress_payload": (
-            job.progress_payload.to_dict() if job.progress_payload is not None else None
-        ),
+        "progress": (job.progress.to_dict() if job.progress is not None else None),
         "progress_updated_at": job.progress_updated_at,
     })
 
@@ -4298,9 +4296,7 @@ def _cancel_job(job_id):
         "error_message": job.error_message,
         "status_details": job.status_details,
         "status_message": job.status_message,
-        "progress_payload": (
-            job.progress_payload.to_dict() if job.progress_payload is not None else None
-        ),
+        "progress": (job.progress.to_dict() if job.progress is not None else None),
         "progress_updated_at": job.progress_updated_at,
     })
 
@@ -6636,8 +6632,8 @@ def _build_prompt_optimization_job_from_entity(job_entity):
     optimization_job.state.status = job_entity.status.to_proto()
     if job_entity.status_message is not None:
         optimization_job.state.status_message = job_entity.status_message
-    if job_entity.progress_payload:
-        optimization_job.state.progress_payload.CopyFrom(job_entity.progress_payload.to_proto())
+    if job_entity.progress:
+        optimization_job.state.progress.CopyFrom(job_entity.progress.to_proto())
     if job_entity.progress_updated_at is not None:
         optimization_job.state.progress_updated_at = job_entity.progress_updated_at
     optimization_job.creation_timestamp_ms = job_entity.creation_time

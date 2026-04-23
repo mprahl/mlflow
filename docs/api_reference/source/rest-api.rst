@@ -7010,7 +7010,7 @@ Provides a unified way to represent job state across different job types.
 +---------------------+------------------------------------------------+----------------------------------------------------------------------------------------------+
 | status_message      | ``STRING``                                     | Latest best-effort in-flight status message.                                                 |
 +---------------------+------------------------------------------------+----------------------------------------------------------------------------------------------+
-| progress_payload    | :ref:`mlflowjobprogress`                       | Latest best-effort structured progress payload.                                              |
+| progress            | :ref:`mlflowjobprogress`                       | Latest best-effort structured progress.                                                      |
 +---------------------+------------------------------------------------+----------------------------------------------------------------------------------------------+
 | progress_updated_at | ``INT64``                                      | Timestamp of the latest progress update in milliseconds since epoch.                         |
 +---------------------+------------------------------------------------+----------------------------------------------------------------------------------------------+
