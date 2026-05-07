@@ -29,9 +29,19 @@ import { getExperimentApi, setExperimentTagApi, updateExperimentApi } from '../.
 import { getExperimentNameValidator } from '../../../../common/forms/validations';
 import { useInvalidateExperimentList } from '../hooks/useExperimentListQuery';
 import { canModifyExperiment, canRenameExperiment } from '../utils/experimentPage.common-utils';
+import {
+  decodeTraceArchivalRetentionTag,
+  encodeTraceArchivalRetentionTag,
+  TRACE_ARCHIVAL_RETENTION_TAG_KEY,
+  validateTraceArchivalRetention,
+} from '../../../../common/utils/traceArchival';
+import { MlflowService } from '../../../sdk/MlflowService';
 
 const extractNoteFromTags = (tags: Record<string, KeyValueEntity>) =>
   Object.values(tags).find((t) => t.key === NOTE_CONTENT_TAG)?.value;
+
+const extractTraceArchivalRetentionFromTags = (tags: KeyValueEntity[]) =>
+  decodeTraceArchivalRetentionTag(tags.find((t) => t.key === TRACE_ARCHIVAL_RETENTION_TAG_KEY)?.value);
 
 const toolbarCommands = [
   ['header', 'bold', 'italic', 'strikethrough'],
@@ -76,6 +86,8 @@ export const ExperimentViewMetadataEditor = ({
   const [tmpName, setTmpName] = useState(experiment.name);
   const [tmpNote, setTmpNote] = useState(effectiveNote);
   const [nameError, setNameError] = useState<string | undefined>();
+  const [tmpRetention, setTmpRetention] = useState(extractTraceArchivalRetentionFromTags(experiment.tags));
+  const [retentionError, setRetentionError] = useState<string | undefined>();
   const [saveError, setSaveError] = useState<string | undefined>();
   const [isSaving, setIsSaving] = useState(false);
   const [selectedTab, setSelectedTab] = useState<'write' | 'preview'>('write');
@@ -104,12 +116,16 @@ export const ExperimentViewMetadataEditor = ({
   );
 
   const handleSubmitEditExperiment = useCallback(
-    async (updatedName?: string, updatedNote?: string) => {
+    async (updatedName?: string, updatedNote?: string, updatedRetention?: string) => {
       const trimmedName = updatedName?.trim() ?? '';
       const currentNote = effectiveNote ?? '';
       const updatedNoteValue = updatedNote ?? '';
       const hasNoteChanged = canEditMetadata && updatedNoteValue !== currentNote;
       const shouldRename = canRename && trimmedName !== experiment.name;
+      const trimmedRetention = updatedRetention?.trim() ?? '';
+      const currentRetention = extractTraceArchivalRetentionFromTags(experiment.tags);
+      const hasRetentionChanged = canEditMetadata && trimmedRetention !== currentRetention;
+      const retentionValidation = validateTraceArchivalRetention(updatedRetention ?? '');
       if (canRename && !trimmedName) {
         setNameError(
           intl.formatMessage({
@@ -117,6 +133,10 @@ export const ExperimentViewMetadataEditor = ({
             description: 'experiment page > edit experiment modal > empty experiment name validation error',
           }),
         );
+        return;
+      }
+      if (canEditMetadata && !retentionValidation.valid) {
+        setRetentionError(retentionValidation.error);
         return;
       }
 
@@ -129,26 +149,48 @@ export const ExperimentViewMetadataEditor = ({
       }
 
       setNameError(undefined);
+      setRetentionError(undefined);
       setSaveError(undefined);
       setIsSaving(true);
+      let didRename = false;
+      let didUpdateRetention = false;
 
       try {
         if (shouldRename) {
           await dispatch(updateExperimentApi(experiment.experimentId, trimmedName));
           invalidateExperimentList();
+          didRename = true;
         }
 
         if (hasNoteChanged) {
           await dispatch(setExperimentTagApi(experiment.experimentId, NOTE_CONTENT_TAG, updatedNote));
         }
 
-        if (shouldRename) {
-          await dispatch(getExperimentApi(experiment.experimentId)).catch(() => undefined);
+        if (hasRetentionChanged) {
+          if (trimmedRetention) {
+            await MlflowService.setExperimentTag({
+              experiment_id: experiment.experimentId,
+              key: TRACE_ARCHIVAL_RETENTION_TAG_KEY,
+              value: encodeTraceArchivalRetentionTag(trimmedRetention),
+            });
+          } else {
+            await MlflowService.deleteExperimentTag({
+              experiment_id: experiment.experimentId,
+              key: TRACE_ARCHIVAL_RETENTION_TAG_KEY,
+            });
+          }
+          didUpdateRetention = true;
         }
 
+        if (didRename || didUpdateRetention) {
+          await dispatch(getExperimentApi(experiment.experimentId)).catch(() => undefined);
+        }
         onNoteUpdated?.();
         setEditing(false);
       } catch (e: any) {
+        if (didRename || didUpdateRetention) {
+          await dispatch(getExperimentApi(experiment.experimentId)).catch(() => undefined);
+        }
         setSaveError(
           e?.message ||
             intl.formatMessage({
@@ -165,6 +207,7 @@ export const ExperimentViewMetadataEditor = ({
       experiment.experimentId,
       experiment.name,
       effectiveNote,
+      experiment.tags,
       invalidateExperimentList,
       intl,
       onNoteUpdated,
@@ -195,9 +238,11 @@ export const ExperimentViewMetadataEditor = ({
       setTmpName(experiment.name);
       setTmpNote(effectiveNote);
       setNameError(undefined);
+      setTmpRetention(extractTraceArchivalRetentionFromTags(experiment.tags));
+      setRetentionError(undefined);
       setSaveError(undefined);
     }
-  }, [editing, effectiveNote, experiment.name]);
+  }, [editing, effectiveNote, experiment.name, experiment.tags]);
 
   return (
     <div
@@ -286,11 +331,13 @@ export const ExperimentViewMetadataEditor = ({
             description="experiment page > edit experiment modal > cancel button"
           />
         }
-        onOk={() => handleSubmitEditExperiment(tmpName, tmpNote)}
+        onOk={() => handleSubmitEditExperiment(tmpName, tmpNote, tmpRetention)}
         onCancel={() => {
           setTmpName(experiment.name);
           setTmpNote(effectiveNote);
           setNameError(undefined);
+          setTmpRetention(extractTraceArchivalRetentionFromTags(experiment.tags));
+          setRetentionError(undefined);
           setSaveError(undefined);
           setEditing(false);
         }}
@@ -352,6 +399,45 @@ export const ExperimentViewMetadataEditor = ({
                 generateMarkdownPreview={() => Promise.resolve(getSanitizedHtmlContent(tmpNote))}
                 getIcon={getIcon}
               />
+            </div>
+          )}
+          {canEditMetadata && (
+            <div>
+              <FormUI.Label htmlFor="mlflow.experiment.edit.trace-archival-retention">
+                <FormattedMessage
+                  defaultMessage="Trace archival retention"
+                  description="experiment page > edit experiment modal > trace archival retention label"
+                />
+              </FormUI.Label>
+              <FormUI.Hint>
+                <FormattedMessage
+                  defaultMessage="Set an experiment-specific archival retention override. Leave blank to inherit the workspace or server default."
+                  description="experiment page > edit experiment modal > trace archival retention hint"
+                />
+              </FormUI.Hint>
+              <FormUI.Hint>
+                <FormattedMessage
+                  defaultMessage="Use durations like 30d, 12h, or 15m."
+                  description="experiment page > edit experiment modal > trace archival retention format hint"
+                />
+              </FormUI.Hint>
+              <Input
+                componentId="mlflow.experiment.edit.trace-archival-retention"
+                id="mlflow.experiment.edit.trace-archival-retention"
+                value={tmpRetention}
+                onChange={(e) => {
+                  setTmpRetention(e.target.value);
+                  if (retentionError) {
+                    setRetentionError(undefined);
+                  }
+                }}
+                placeholder={intl.formatMessage({
+                  defaultMessage: 'Enter trace archival retention (for example 30d)',
+                  description: 'experiment page > edit experiment modal > trace archival retention placeholder',
+                })}
+                validationState={retentionError ? 'error' : undefined}
+              />
+              {retentionError && <FormUI.Message type="error" message={retentionError} />}
             </div>
           )}
         </div>

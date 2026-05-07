@@ -11,7 +11,7 @@ import {
   Typography,
   useDesignSystemTheme,
 } from '@databricks/design-system';
-import { FormattedMessage } from 'react-intl';
+import { FormattedMessage, useIntl } from 'react-intl';
 import { createMLflowRoutePath, Link, useLocation, useNavigate } from '../../../../../common/utils/RoutingUtils';
 import Routes from '../../../../routes';
 import { ExperimentViewCopyTitle } from './ExperimentViewCopyTitle';
@@ -31,6 +31,10 @@ import { ExperimentKind } from '../../../../constants';
 import { useGetExperimentPageActiveTabByRoute } from '../../hooks/useGetExperimentPageActiveTabByRoute';
 import { useWorkflowType } from '@mlflow/mlflow/src/common/contexts/WorkflowTypeContext';
 import { getTabDisplayIcon, getTabDisplayName } from './ExperimentViewHeader.utils';
+import {
+  decodeTraceArchivalRetentionTag,
+  TRACE_ARCHIVAL_RETENTION_TAG_KEY,
+} from '../../../../../common/utils/traceArchival';
 
 const getDocLinkHref = (experimentKind: ExperimentKind) => {
   if (isGenAIExperimentKind(experimentKind)) {
@@ -61,6 +65,7 @@ export const ExperimentViewHeader = React.memo(
     experimentKindSelector?: React.ReactNode;
   }) => {
     const { theme } = useDesignSystemTheme();
+    const intl = useIntl();
     const navigate = useNavigate();
     const location = useLocation();
     const handleBack = useCallback(() => {
@@ -92,6 +97,17 @@ export const ExperimentViewHeader = React.memo(
     const { workflowType } = useWorkflowType();
     const tabDisplayName = activeTabByRoute ? getTabDisplayName(activeTabByRoute, workflowType) : undefined;
     const normalizedExperimentName = useMemo(() => experiment.name.split('/').pop(), [experiment.name]);
+    const traceArchivalRetention = useMemo(
+      () =>
+        decodeTraceArchivalRetentionTag(
+          experiment.tags.find((tag) => tag.key === TRACE_ARCHIVAL_RETENTION_TAG_KEY)?.value,
+        ) ||
+        intl.formatMessage({
+          defaultMessage: 'Inherited',
+          description: 'Fallback value when experiment trace archival retention is inherited',
+        }),
+      [experiment.tags, intl],
+    );
     const experimentTitle =
       shouldEnableWorkflowBasedNavigation() && tabDisplayName ? tabDisplayName : normalizedExperimentName;
 
@@ -157,6 +173,13 @@ export const ExperimentViewHeader = React.memo(
                 />
                 : <ExperimentViewArtifactLocation artifactLocation={experiment.artifactLocation} />{' '}
                 <ExperimentViewCopyArtifactLocation experiment={experiment} />
+              </div>
+              <div style={{ whiteSpace: 'nowrap' }}>
+                <FormattedMessage
+                  defaultMessage="Trace Archival Retention"
+                  description="Label for displaying the experiment trace archival retention"
+                />
+                : {traceArchivalRetention}
               </div>
             </div>
           </InfoPopover>

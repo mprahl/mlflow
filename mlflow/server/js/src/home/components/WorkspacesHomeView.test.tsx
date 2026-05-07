@@ -175,6 +175,7 @@ describe('WorkspacesHomeView', () => {
           name: 'ml-research',
           description: 'Research experiments',
           default_artifact_root: 's3://artifacts/ml-research',
+          trace_archival_config: { location: 's3://archive/ml-research', retention: '30d' },
         },
       ],
       isLoading: false,
@@ -188,6 +189,9 @@ describe('WorkspacesHomeView', () => {
     expect(screen.getByText('Edit Workspace')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Research experiments')).toBeInTheDocument();
     expect(screen.getByDisplayValue('s3://artifacts/ml-research')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('s3://archive/ml-research')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('30d')).toBeInTheDocument();
+    expect(screen.getByText('Clear any optional field and save to remove the workspace override.')).toBeInTheDocument();
   });
 
   test('saves updated fields from the edit modal', async () => {
@@ -211,7 +215,7 @@ describe('WorkspacesHomeView', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Edit workspace' }));
     await userEvent.clear(screen.getByDisplayValue('Research experiments'));
     await userEvent.type(screen.getByPlaceholderText('Enter workspace description'), 'Updated description');
-    await userEvent.clear(screen.getByDisplayValue('s3://artifacts/ml-research'));
+    await userEvent.clear(screen.getByPlaceholderText('Enter default artifact root URI'));
     await userEvent.type(screen.getByPlaceholderText('Enter default artifact root URI'), 's3://artifacts/new-team');
 
     await userEvent.click(screen.getByText('Save'));
@@ -229,6 +233,111 @@ describe('WorkspacesHomeView', () => {
         }),
       );
     });
+  });
+
+  test('saves updated archival fields from the edit modal', async () => {
+    mockUpdateWorkspace.mockImplementation((_variables, options: any) => {
+      options?.onSuccess?.({} as any, undefined as any, undefined as any);
+    });
+    jest.mocked(useWorkspaces).mockReturnValue({
+      workspaces: [
+        {
+          name: 'ml-research',
+          description: 'Research experiments',
+          default_artifact_root: 's3://artifacts/ml-research',
+          trace_archival_config: { location: 's3://archive/ml-research', retention: '30d' },
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn() as any,
+    });
+
+    renderComponent();
+    await userEvent.click(screen.getByRole('button', { name: 'Edit workspace' }));
+    await userEvent.clear(screen.getByDisplayValue('s3://archive/ml-research'));
+    await userEvent.type(screen.getByPlaceholderText('Enter trace archival location URI'), 's3://archive/new-team');
+    await userEvent.clear(screen.getByDisplayValue('30d'));
+    await userEvent.type(screen.getByPlaceholderText('Enter trace archival retention (for example 30d)'), '14d');
+
+    await userEvent.click(screen.getByText('Save'));
+
+    await waitFor(() => {
+      expect(mockUpdateWorkspace).toHaveBeenCalledWith(
+        {
+          name: 'ml-research',
+          trace_archival_config: { location: 's3://archive/new-team', retention: '14d' },
+        },
+        expect.objectContaining({
+          onSuccess: expect.any(Function),
+          onError: expect.any(Function),
+        }),
+      );
+    });
+  });
+
+  test('clears archival overrides from the edit modal', async () => {
+    mockUpdateWorkspace.mockImplementation((_variables, options: any) => {
+      options?.onSuccess?.({} as any, undefined as any, undefined as any);
+    });
+    jest.mocked(useWorkspaces).mockReturnValue({
+      workspaces: [
+        {
+          name: 'ml-research',
+          description: 'Research experiments',
+          default_artifact_root: 's3://artifacts/ml-research',
+          trace_archival_config: { location: 's3://archive/ml-research', retention: '30d' },
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn() as any,
+    });
+
+    renderComponent();
+    await userEvent.click(screen.getByRole('button', { name: 'Edit workspace' }));
+    await userEvent.clear(screen.getByDisplayValue('s3://archive/ml-research'));
+    await userEvent.clear(screen.getByDisplayValue('30d'));
+
+    await userEvent.click(screen.getByText('Save'));
+
+    await waitFor(() => {
+      expect(mockUpdateWorkspace).toHaveBeenCalledWith(
+        {
+          name: 'ml-research',
+          trace_archival_config: { location: '', retention: '' },
+        },
+        expect.objectContaining({
+          onSuccess: expect.any(Function),
+          onError: expect.any(Function),
+        }),
+      );
+    });
+  });
+
+  test('does not save archival overrides when only whitespace changes', async () => {
+    jest.mocked(useWorkspaces).mockReturnValue({
+      workspaces: [
+        {
+          name: 'ml-research',
+          description: 'Research experiments',
+          default_artifact_root: 's3://artifacts/ml-research',
+          trace_archival_config: { location: 's3://archive/ml-research', retention: '30d' },
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn() as any,
+    });
+
+    renderComponent();
+    await userEvent.click(screen.getByRole('button', { name: 'Edit workspace' }));
+    await userEvent.type(screen.getByDisplayValue('s3://archive/ml-research'), ' ');
+    await userEvent.type(screen.getByDisplayValue('30d'), ' ');
+
+    await userEvent.click(screen.getByText('Save'));
+
+    expect(mockUpdateWorkspace).not.toHaveBeenCalled();
   });
 
   test('shows an inline error when saving the edit modal fails', async () => {
@@ -249,6 +358,27 @@ describe('WorkspacesHomeView', () => {
     await userEvent.click(screen.getByText('Save'));
 
     expect(await screen.findByText('Save failed')).toBeInTheDocument();
+  });
+
+  test('shows validation error for invalid trace archival retention in edit modal', async () => {
+    jest.mocked(useWorkspaces).mockReturnValue({
+      workspaces: [{ name: 'ml-research', description: 'Research experiments' }],
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn() as any,
+    });
+
+    renderComponent();
+    await userEvent.click(screen.getByRole('button', { name: 'Edit workspace' }));
+    await userEvent.type(screen.getByPlaceholderText('Enter trace archival retention (for example 30d)'), '30days');
+    await userEvent.click(screen.getByText('Save'));
+
+    expect(
+      await screen.findByText(
+        "Trace archival retention must use the format <int><unit>, where unit is one of 'm', 'h', or 'd'.",
+      ),
+    ).toBeInTheDocument();
+    expect(mockUpdateWorkspace).not.toHaveBeenCalled();
   });
 
   test('renders error state', () => {
