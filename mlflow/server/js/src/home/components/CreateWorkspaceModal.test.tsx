@@ -1,5 +1,5 @@
 import { describe, jest, beforeEach, test, expect } from '@jest/globals';
-import { waitFor } from '@testing-library/react';
+import { fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import userEvent from '@testing-library/user-event';
 import { useCreateWorkspaceModal } from './CreateWorkspaceModal';
@@ -43,9 +43,16 @@ describe('CreateWorkspaceModal', () => {
     await userEvent.click(openButton);
   };
 
+  const openTraceArchivalSection = async () => {
+    const trigger = document.querySelector('.ant-collapse-header');
+    expect(trigger).toBeTruthy();
+    fireEvent.click(trigger!);
+  };
+
   test('renders modal when open', async () => {
     renderComponent();
     await openModal();
+    await openTraceArchivalSection();
     expect(screen.getByText('Create Workspace')).toBeInTheDocument();
     expect(screen.getByText(/Workspace Name/i)).toBeInTheDocument();
     expect(screen.getByText(/^Description$/i)).toBeInTheDocument();
@@ -56,7 +63,7 @@ describe('CreateWorkspaceModal', () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        'Optional. Override how long traces stay in the tracking store before archival. Use durations like 30d, 12h, or 15m. Leave blank to use the server default.',
+        'Optional. Override how long traces stay in the tracking store before archival. Leave blank to use the server default.',
       ),
     ).toBeInTheDocument();
   });
@@ -69,12 +76,13 @@ describe('CreateWorkspaceModal', () => {
   test('renders input fields with correct placeholders', async () => {
     renderComponent();
     await openModal();
+    await openTraceArchivalSection();
 
     expect(screen.getByPlaceholderText('Enter workspace name')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Enter workspace description')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Enter default artifact root URI')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Enter trace archival location URI')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Enter trace archival retention (for example 30d)')).toBeInTheDocument();
+    expect(screen.getByLabelText('Trace Archival Retention')).toBeInTheDocument();
   });
 
   test('renders Create button', async () => {
@@ -229,9 +237,10 @@ describe('CreateWorkspaceModal', () => {
   test('shows validation error for invalid trace archival retention', async () => {
     renderComponent();
     await openModal();
+    await openTraceArchivalSection();
 
     await userEvent.type(screen.getByPlaceholderText('Enter workspace name'), 'team-a');
-    await userEvent.type(screen.getByPlaceholderText('Enter trace archival retention (for example 30d)'), '30days');
+    await userEvent.type(screen.getByLabelText('Trace Archival Retention'), '30days');
 
     await userEvent.click(screen.getByText('Create'));
 
@@ -248,12 +257,13 @@ describe('CreateWorkspaceModal', () => {
   test('submits trace archival config when provided', async () => {
     renderComponent();
     await openModal();
+    await openTraceArchivalSection();
 
     await userEvent.type(screen.getByPlaceholderText('Enter workspace name'), 'team-a');
     await userEvent.type(screen.getByPlaceholderText('Enter workspace description'), 'Team A workspace');
     await userEvent.type(screen.getByPlaceholderText('Enter default artifact root URI'), 's3://artifacts/team-a');
     await userEvent.type(screen.getByPlaceholderText('Enter trace archival location URI'), 's3://archive/team-a');
-    await userEvent.type(screen.getByPlaceholderText('Enter trace archival retention (for example 30d)'), '30d');
+    await userEvent.type(screen.getByLabelText('Trace Archival Retention'), '30');
 
     await userEvent.click(screen.getByText('Create'));
 

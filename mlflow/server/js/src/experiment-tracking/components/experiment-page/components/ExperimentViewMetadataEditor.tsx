@@ -23,6 +23,7 @@ import {
   getMarkdownConverter,
   sanitizeConvertedHtml,
 } from '../../../../common/utils/MarkdownUtils';
+import { TraceArchivalRetentionInput } from '../../../../common/components/TraceArchivalRetentionInput';
 import { ThemeAwareReactMde } from '../../../../common/components/EditableNote';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { getExperimentApi, setExperimentTagApi, updateExperimentApi } from '../../../actions';
@@ -30,10 +31,14 @@ import { getExperimentNameValidator } from '../../../../common/forms/validations
 import { useInvalidateExperimentList } from '../hooks/useExperimentListQuery';
 import { canModifyExperiment, canRenameExperiment } from '../utils/experimentPage.common-utils';
 import {
+  DEFAULT_TRACE_ARCHIVAL_RETENTION_UNIT,
   decodeTraceArchivalRetentionTag,
   encodeTraceArchivalRetentionTag,
+  formatTraceArchivalRetention,
+  getTraceArchivalRetentionValidationError,
+  parseTraceArchivalRetention,
   TRACE_ARCHIVAL_RETENTION_TAG_KEY,
-  validateTraceArchivalRetention,
+  type TraceArchivalRetentionUnit,
 } from '../../../../common/utils/traceArchival';
 import { MlflowService } from '../../../sdk/MlflowService';
 
@@ -83,10 +88,15 @@ export const ExperimentViewMetadataEditor = ({
   );
 
   const effectiveNote = storedNote ?? defaultValue;
+  const currentTraceArchivalRetention = extractTraceArchivalRetentionFromTags(experiment.tags);
+  const initialTraceArchivalRetentionState = parseTraceArchivalRetention(currentTraceArchivalRetention);
   const [tmpName, setTmpName] = useState(experiment.name);
   const [tmpNote, setTmpNote] = useState(effectiveNote);
   const [nameError, setNameError] = useState<string | undefined>();
-  const [tmpRetention, setTmpRetention] = useState(extractTraceArchivalRetentionFromTags(experiment.tags));
+  const [tmpRetentionAmount, setTmpRetentionAmount] = useState(initialTraceArchivalRetentionState.amount);
+  const [tmpRetentionUnit, setTmpRetentionUnit] = useState<TraceArchivalRetentionUnit>(
+    initialTraceArchivalRetentionState.unit,
+  );
   const [retentionError, setRetentionError] = useState<string | undefined>();
   const [saveError, setSaveError] = useState<string | undefined>();
   const [isSaving, setIsSaving] = useState(false);
@@ -107,6 +117,21 @@ export const ExperimentViewMetadataEditor = ({
   const canEditMetadata = canModifyExperiment(experiment);
   const canRename = canRenameExperiment(experiment);
 
+  const updateTmpRetention = useCallback(
+    ({
+      amount = tmpRetentionAmount,
+      unit = tmpRetentionUnit,
+    }: {
+      amount?: string;
+      unit?: TraceArchivalRetentionUnit;
+    }) => {
+      setTmpRetentionAmount(amount);
+      setTmpRetentionUnit(unit);
+      setRetentionError(getTraceArchivalRetentionValidationError(amount, unit));
+    },
+    [tmpRetentionAmount, tmpRetentionUnit],
+  );
+
   const validateExperimentName = useCallback(
     async (experimentName: string) =>
       new Promise<string | undefined>((resolve) => {
@@ -116,16 +141,23 @@ export const ExperimentViewMetadataEditor = ({
   );
 
   const handleSubmitEditExperiment = useCallback(
-    async (updatedName?: string, updatedNote?: string, updatedRetention?: string) => {
+    async (
+      updatedName?: string,
+      updatedNote?: string,
+      updatedRetentionAmount?: string,
+      updatedRetentionUnit: TraceArchivalRetentionUnit = DEFAULT_TRACE_ARCHIVAL_RETENTION_UNIT,
+    ) => {
       const trimmedName = updatedName?.trim() ?? '';
       const currentNote = effectiveNote ?? '';
       const updatedNoteValue = updatedNote ?? '';
       const hasNoteChanged = canEditMetadata && updatedNoteValue !== currentNote;
       const shouldRename = canRename && trimmedName !== experiment.name;
-      const trimmedRetention = updatedRetention?.trim() ?? '';
-      const currentRetention = extractTraceArchivalRetentionFromTags(experiment.tags);
-      const hasRetentionChanged = canEditMetadata && trimmedRetention !== currentRetention;
-      const retentionValidation = validateTraceArchivalRetention(updatedRetention ?? '');
+      const trimmedRetention = formatTraceArchivalRetention(updatedRetentionAmount ?? '', updatedRetentionUnit);
+      const hasRetentionChanged = canEditMetadata && trimmedRetention !== currentTraceArchivalRetention;
+      const retentionValidationError = getTraceArchivalRetentionValidationError(
+        updatedRetentionAmount ?? '',
+        updatedRetentionUnit,
+      );
       if (canRename && !trimmedName) {
         setNameError(
           intl.formatMessage({
@@ -135,8 +167,8 @@ export const ExperimentViewMetadataEditor = ({
         );
         return;
       }
-      if (canEditMetadata && !retentionValidation.valid) {
-        setRetentionError(retentionValidation.error);
+      if (canEditMetadata && retentionValidationError) {
+        setRetentionError(retentionValidationError);
         return;
       }
 
@@ -207,7 +239,7 @@ export const ExperimentViewMetadataEditor = ({
       experiment.experimentId,
       experiment.name,
       effectiveNote,
-      experiment.tags,
+      currentTraceArchivalRetention,
       invalidateExperimentList,
       intl,
       onNoteUpdated,
@@ -238,11 +270,13 @@ export const ExperimentViewMetadataEditor = ({
       setTmpName(experiment.name);
       setTmpNote(effectiveNote);
       setNameError(undefined);
-      setTmpRetention(extractTraceArchivalRetentionFromTags(experiment.tags));
+      const nextTraceArchivalRetentionState = parseTraceArchivalRetention(currentTraceArchivalRetention);
+      setTmpRetentionAmount(nextTraceArchivalRetentionState.amount);
+      setTmpRetentionUnit(nextTraceArchivalRetentionState.unit);
       setRetentionError(undefined);
       setSaveError(undefined);
     }
-  }, [editing, effectiveNote, experiment.name, experiment.tags]);
+  }, [editing, effectiveNote, experiment.name, currentTraceArchivalRetention]);
 
   return (
     <div
@@ -331,12 +365,14 @@ export const ExperimentViewMetadataEditor = ({
             description="experiment page > edit experiment modal > cancel button"
           />
         }
-        onOk={() => handleSubmitEditExperiment(tmpName, tmpNote, tmpRetention)}
+        onOk={() => handleSubmitEditExperiment(tmpName, tmpNote, tmpRetentionAmount, tmpRetentionUnit)}
         onCancel={() => {
           setTmpName(experiment.name);
           setTmpNote(effectiveNote);
           setNameError(undefined);
-          setTmpRetention(extractTraceArchivalRetentionFromTags(experiment.tags));
+          const nextTraceArchivalRetentionState = parseTraceArchivalRetention(currentTraceArchivalRetention);
+          setTmpRetentionAmount(nextTraceArchivalRetentionState.amount);
+          setTmpRetentionUnit(nextTraceArchivalRetentionState.unit);
           setRetentionError(undefined);
           setSaveError(undefined);
           setEditing(false);
@@ -403,7 +439,7 @@ export const ExperimentViewMetadataEditor = ({
           )}
           {canEditMetadata && (
             <div>
-              <FormUI.Label htmlFor="mlflow.experiment.edit.trace-archival-retention">
+              <FormUI.Label htmlFor="mlflow.experiment.edit.trace-archival-retention-amount">
                 <FormattedMessage
                   defaultMessage="Trace archival retention"
                   description="experiment page > edit experiment modal > trace archival retention label"
@@ -411,31 +447,19 @@ export const ExperimentViewMetadataEditor = ({
               </FormUI.Label>
               <FormUI.Hint>
                 <FormattedMessage
-                  defaultMessage="Set an experiment-specific archival retention override. Leave blank to inherit the workspace or server default."
+                  defaultMessage="Optional. Set an experiment-specific archival retention override. Leave blank to inherit the workspace or server default."
                   description="experiment page > edit experiment modal > trace archival retention hint"
                 />
               </FormUI.Hint>
-              <FormUI.Hint>
-                <FormattedMessage
-                  defaultMessage="Use durations like 30d, 12h, or 15m."
-                  description="experiment page > edit experiment modal > trace archival retention format hint"
-                />
-              </FormUI.Hint>
-              <Input
+              <TraceArchivalRetentionInput
+                amount={tmpRetentionAmount}
+                amountInputId="mlflow.experiment.edit.trace-archival-retention-amount"
                 componentId="mlflow.experiment.edit.trace-archival-retention"
-                id="mlflow.experiment.edit.trace-archival-retention"
-                value={tmpRetention}
-                onChange={(e) => {
-                  setTmpRetention(e.target.value);
-                  if (retentionError) {
-                    setRetentionError(undefined);
-                  }
-                }}
-                placeholder={intl.formatMessage({
-                  defaultMessage: 'Enter trace archival retention (for example 30d)',
-                  description: 'experiment page > edit experiment modal > trace archival retention placeholder',
-                })}
-                validationState={retentionError ? 'error' : undefined}
+                error={Boolean(retentionError)}
+                onAmountChange={(amount) => updateTmpRetention({ amount })}
+                onUnitChange={(unit) => updateTmpRetention({ unit })}
+                unitSelectorId="mlflow.experiment.edit.trace-archival-retention-unit"
+                unit={tmpRetentionUnit}
               />
               {retentionError && <FormUI.Message type="error" message={retentionError} />}
             </div>

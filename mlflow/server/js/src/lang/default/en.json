@@ -355,6 +355,10 @@
     "defaultMessage": "or",
     "description": "Divider between model list and custom input"
   },
+  "015x8a": {
+    "defaultMessage": "Days",
+    "description": "Trace archival retention unit option for days"
+  },
   "02+DX/": {
     "defaultMessage": "Provider cannot be changed.",
     "description": "Tooltip explaining why provider field is disabled"
@@ -427,10 +431,6 @@
     "defaultMessage": "Error registering model",
     "description": "Notification title for model registration failure on the logged model details page"
   },
-  "0S4YgD": {
-    "defaultMessage": "Optional. Override how long traces stay in the tracking store before archival. Use durations like 30d, 12h, or 15m. Leave blank to use the server default.",
-    "description": "Hint for workspace trace archival retention field"
-  },
   "0T1I+b": {
     "defaultMessage": "MLflow documentation",
     "description": "Link to tracing documentation"
@@ -462,6 +462,10 @@
   "0ja5l/": {
     "defaultMessage": "No tags found.",
     "description": "Text for no tags found in editable form table in MLflow"
+  },
+  "0ktvTS": {
+    "defaultMessage": "Trace archival retention unit",
+    "description": "Label for trace archival retention unit selector"
   },
   "0pY/4R": {
     "defaultMessage": "Usage",
@@ -767,6 +771,10 @@
     "defaultMessage": "Edit",
     "description": "Text for the edit button next to the description section title on the experiment view page"
   },
+  "2YYEux": {
+    "defaultMessage": "Hours",
+    "description": "Trace archival retention unit option for hours"
+  },
   "2a/rR8": {
     "defaultMessage": "Cancel",
     "description": "Key-value tag editor modal > Manage Tag cancel button"
@@ -870,10 +878,6 @@
   "3D2Znf": {
     "defaultMessage": "Filter by {columnNames}",
     "description": "Experiment page > artifact compare view > search input placeholder"
-  },
-  "3J0Xa/": {
-    "defaultMessage": "Set an experiment-specific archival retention override. Leave blank to inherit the workspace or server default.",
-    "description": "experiment page > edit experiment modal > trace archival retention hint"
   },
   "3JAJtl": {
     "defaultMessage": "Current password",
@@ -1779,6 +1783,10 @@
     "defaultMessage": "3. Access the MLflow UI",
     "description": "Section title explaining how to access traces in the MLflow UI"
   },
+  "8v0vur": {
+    "defaultMessage": "Archive after: {retention}",
+    "description": "Badge showing the active trace archival retention for the experiment"
+  },
   "8wnmuq": {
     "defaultMessage": "2. Trace your code",
     "description": "Section title introducing the tracing quickstart example"
@@ -2326,10 +2334,6 @@
   "Bs2X0L": {
     "defaultMessage": "Created by",
     "description": "Label for the creator of a logged model on the logged model details page"
-  },
-  "BsWwtO": {
-    "defaultMessage": "Use durations like 30d, 12h, or 15m.",
-    "description": "experiment page > edit experiment modal > trace archival retention format hint"
   },
   "BsbMZW": {
     "defaultMessage": "Guardrail Model",
@@ -3423,6 +3427,10 @@
     "defaultMessage": "Operator",
     "description": "Tag filter input for operator field in the tags filter popover for experiments page search by tags"
   },
+  "JE+Ubm": {
+    "defaultMessage": "Trace archival settings",
+    "description": "Accordion title for trace archival workspace settings"
+  },
   "JGQ5B2": {
     "defaultMessage": "Add",
     "description": "Model registry > model version table > metadata column > 'add' button label"
@@ -3950,6 +3958,10 @@
   "MgFOU5": {
     "defaultMessage": "Inputs",
     "description": "Label for inputs variable option"
+  },
+  "MgWR3B": {
+    "defaultMessage": "Archived traces remain accessible, but searching within span content no longer works after archival.",
+    "description": "Tooltip explaining the trace archival badge behavior"
   },
   "MgfSs1": {
     "defaultMessage": "Budget amount (USD)",
@@ -6991,10 +7003,6 @@
     "defaultMessage": "Model version alias created",
     "description": "Webhook event label"
   },
-  "elyrEi": {
-    "defaultMessage": "Inherited",
-    "description": "Fallback value when experiment trace archival retention is inherited"
-  },
   "embiKN": {
     "defaultMessage": "JSON body sent to the endpoint. Edit the fields and click Send request.",
     "description": "Request body tooltip in starter code try-it modal"
@@ -7070,6 +7078,10 @@
   "fKx4kG": {
     "defaultMessage": "Aggregation: {value}",
     "description": "Experiment page > group by runs control > current aggregation function tooltip"
+  },
+  "fMDibn": {
+    "defaultMessage": "Optional. Set an experiment-specific archival retention override. Leave blank to inherit the workspace or server default.",
+    "description": "experiment page > edit experiment modal > trace archival retention hint"
   },
   "fMepK0": {
     "defaultMessage": "Create model version",
@@ -7255,6 +7267,10 @@
     "defaultMessage": "Stages have been deprecated in the new Model Registry UI. Learn how to migrate models <link>here</link>.",
     "description": "Tooltip content for the disabled stage metadata in model version page"
   },
+  "gKb5eO": {
+    "defaultMessage": "Minutes",
+    "description": "Trace archival retention unit option for minutes"
+  },
   "gLj8lU": {
     "defaultMessage": "<strong>{length}</strong> matching {length, plural, =0 {runs} =1 {run} other {runs}}",
     "description": "Message for displaying how many runs match search criteria on experiment page"
@@ -7338,10 +7354,6 @@
   "gerwuf": {
     "defaultMessage": "Edit",
     "description": "Trace actions dropdown group label"
-  },
-  "ggEIPP": {
-    "defaultMessage": "Enter trace archival retention (for example 30d)",
-    "description": "experiment page > edit experiment modal > trace archival retention placeholder"
   },
   "giZdtW": {
     "defaultMessage": "Model",
@@ -8134,10 +8146,6 @@
   "lIURTA": {
     "defaultMessage": "Name",
     "description": "Workspaces table name column header"
-  },
-  "lJ0f/i": {
-    "defaultMessage": "Enter trace archival retention (for example 30d)",
-    "description": "Placeholder for workspace trace archival retention input"
   },
   "lJC4eF": {
     "defaultMessage": "Assessments",
@@ -10214,6 +10222,10 @@
   "xgypqc": {
     "defaultMessage": "Copied to clipboard",
     "description": "Success message for the notification"
+  },
+  "xh4RpT": {
+    "defaultMessage": "Optional. Override how long traces stay in the tracking store before archival. Leave blank to use the server default.",
+    "description": "Hint for workspace trace archival retention field"
   },
   "xhAFcl": {
     "defaultMessage": "Failed to cancel job: {error}",

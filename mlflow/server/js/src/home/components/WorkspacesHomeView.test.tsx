@@ -1,6 +1,7 @@
 /* eslint-disable @databricks/no-mock-location*/
 import { describe, jest, beforeEach, test, expect, afterEach } from '@jest/globals';
 import '@testing-library/jest-dom';
+import { fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { WorkspacesHomeView } from './WorkspacesHomeView';
 import { useWorkspaces } from '../../workspaces/hooks/useWorkspaces';
@@ -60,6 +61,12 @@ describe('WorkspacesHomeView', () => {
         </MemoryRouter>
       </QueryClientProvider>,
     );
+  };
+
+  const openTraceArchivalSection = async () => {
+    const trigger = document.querySelector('.ant-collapse-header');
+    expect(trigger).toBeTruthy();
+    fireEvent.click(trigger!);
   };
 
   test('renders loading state', () => {
@@ -185,12 +192,13 @@ describe('WorkspacesHomeView', () => {
 
     renderComponent();
     await userEvent.click(screen.getByRole('button', { name: 'Edit workspace' }));
+    await openTraceArchivalSection();
 
     expect(screen.getByText('Edit Workspace')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Research experiments')).toBeInTheDocument();
     expect(screen.getByDisplayValue('s3://artifacts/ml-research')).toBeInTheDocument();
     expect(screen.getByDisplayValue('s3://archive/ml-research')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('30d')).toBeInTheDocument();
+    expect(screen.getByLabelText('Trace Archival Retention')).toHaveValue('30');
     expect(screen.getByText('Clear any optional field and save to remove the workspace override.')).toBeInTheDocument();
   });
 
@@ -255,10 +263,11 @@ describe('WorkspacesHomeView', () => {
 
     renderComponent();
     await userEvent.click(screen.getByRole('button', { name: 'Edit workspace' }));
+    await openTraceArchivalSection();
     await userEvent.clear(screen.getByDisplayValue('s3://archive/ml-research'));
     await userEvent.type(screen.getByPlaceholderText('Enter trace archival location URI'), 's3://archive/new-team');
-    await userEvent.clear(screen.getByDisplayValue('30d'));
-    await userEvent.type(screen.getByPlaceholderText('Enter trace archival retention (for example 30d)'), '14d');
+    await userEvent.clear(screen.getByLabelText('Trace Archival Retention'));
+    await userEvent.type(screen.getByLabelText('Trace Archival Retention'), '14');
 
     await userEvent.click(screen.getByText('Save'));
 
@@ -296,8 +305,9 @@ describe('WorkspacesHomeView', () => {
 
     renderComponent();
     await userEvent.click(screen.getByRole('button', { name: 'Edit workspace' }));
+    await openTraceArchivalSection();
     await userEvent.clear(screen.getByDisplayValue('s3://archive/ml-research'));
-    await userEvent.clear(screen.getByDisplayValue('30d'));
+    await userEvent.clear(screen.getByLabelText('Trace Archival Retention'));
 
     await userEvent.click(screen.getByText('Save'));
 
@@ -332,8 +342,9 @@ describe('WorkspacesHomeView', () => {
 
     renderComponent();
     await userEvent.click(screen.getByRole('button', { name: 'Edit workspace' }));
+    await openTraceArchivalSection();
     await userEvent.type(screen.getByDisplayValue('s3://archive/ml-research'), ' ');
-    await userEvent.type(screen.getByDisplayValue('30d'), ' ');
+    await userEvent.type(screen.getByLabelText('Trace Archival Retention'), ' ');
 
     await userEvent.click(screen.getByText('Save'));
 
@@ -370,7 +381,8 @@ describe('WorkspacesHomeView', () => {
 
     renderComponent();
     await userEvent.click(screen.getByRole('button', { name: 'Edit workspace' }));
-    await userEvent.type(screen.getByPlaceholderText('Enter trace archival retention (for example 30d)'), '30days');
+    await openTraceArchivalSection();
+    await userEvent.type(screen.getByLabelText('Trace Archival Retention'), '30days');
     await userEvent.click(screen.getByText('Save'));
 
     expect(

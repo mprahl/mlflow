@@ -89,7 +89,7 @@ describe('ExperimentViewMetadataEditor', () => {
 
     expect(screen.getByText('Edit experiment')).toBeInTheDocument();
     expect(screen.getByDisplayValue('test/experiment/name')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Enter trace archival retention (for example 30d)')).toHaveValue('30d');
+    expect(screen.getByLabelText('Trace archival retention')).toHaveValue('30');
 
     await userEvent.clear(screen.getByDisplayValue('test/experiment/name'));
     await userEvent.type(screen.getByPlaceholderText('Enter experiment name'), 'renamed-experiment');
@@ -101,6 +101,22 @@ describe('ExperimentViewMetadataEditor', () => {
     expect(setExperimentTagApi).not.toHaveBeenCalled();
     expect(getExperimentApi).toHaveBeenCalledWith('123');
     expect(mockInvalidateExperimentList).toHaveBeenCalled();
+  });
+
+  test('associates the trace archival retention label with the amount input', () => {
+    renderWithDesignSystem(
+      <ExperimentViewMetadataEditor
+        experiment={defaultExperiment}
+        editing
+        setEditing={jest.fn()}
+        defaultValue="Existing description"
+      />,
+    );
+
+    expect(screen.getByLabelText('Trace archival retention')).toHaveAttribute(
+      'id',
+      'mlflow.experiment.edit.trace-archival-retention-amount',
+    );
   });
 
   test('does not save the description when the rename fails', async () => {
@@ -314,8 +330,8 @@ describe('ExperimentViewMetadataEditor', () => {
       />,
     );
 
-    await userEvent.clear(screen.getByPlaceholderText('Enter trace archival retention (for example 30d)'));
-    await userEvent.type(screen.getByPlaceholderText('Enter trace archival retention (for example 30d)'), '14d');
+    await userEvent.clear(screen.getByLabelText('Trace archival retention'));
+    await userEvent.type(screen.getByLabelText('Trace archival retention'), '14');
     await userEvent.click(screen.getByText('Save'));
 
     await waitFor(() => {
@@ -339,7 +355,7 @@ describe('ExperimentViewMetadataEditor', () => {
       />,
     );
 
-    await userEvent.clear(screen.getByPlaceholderText('Enter trace archival retention (for example 30d)'));
+    await userEvent.clear(screen.getByLabelText('Trace archival retention'));
     await userEvent.click(screen.getByText('Save'));
 
     await waitFor(() => {
@@ -360,8 +376,8 @@ describe('ExperimentViewMetadataEditor', () => {
       />,
     );
 
-    await userEvent.clear(screen.getByPlaceholderText('Enter trace archival retention (for example 30d)'));
-    await userEvent.type(screen.getByPlaceholderText('Enter trace archival retention (for example 30d)'), '30days');
+    await userEvent.clear(screen.getByLabelText('Trace archival retention'));
+    await userEvent.type(screen.getByLabelText('Trace archival retention'), '0');
     await userEvent.click(screen.getByText('Save'));
 
     expect(
@@ -370,6 +386,22 @@ describe('ExperimentViewMetadataEditor', () => {
       ),
     ).toBeInTheDocument();
     expect(MlflowService.setExperimentTag).not.toHaveBeenCalled();
+  });
+
+  test('preserves invalid retention characters so validation feedback is visible', async () => {
+    renderWithDesignSystem(
+      <ExperimentViewMetadataEditor
+        experiment={defaultExperiment}
+        editing
+        setEditing={jest.fn()}
+        defaultValue="Existing description"
+      />,
+    );
+
+    await userEvent.clear(screen.getByLabelText('Trace archival retention'));
+    await userEvent.type(screen.getByLabelText('Trace archival retention'), '1a');
+
+    expect(screen.getByLabelText('Trace archival retention')).toHaveValue('1a');
   });
   test('only shows the inline edit button when metadata modification is allowed', () => {
     const { rerender } = renderWithDesignSystem(
@@ -424,8 +456,8 @@ describe('ExperimentViewMetadataEditor', () => {
 
     await userEvent.clear(screen.getByDisplayValue('test/experiment/name'));
     await userEvent.type(screen.getByPlaceholderText('Enter experiment name'), 'renamed-experiment');
-    await userEvent.clear(screen.getByPlaceholderText('Enter trace archival retention (for example 30d)'));
-    await userEvent.type(screen.getByPlaceholderText('Enter trace archival retention (for example 30d)'), '14d');
+    await userEvent.clear(screen.getByLabelText('Trace archival retention'));
+    await userEvent.type(screen.getByLabelText('Trace archival retention'), '14');
     await userEvent.click(screen.getByText('Save'));
 
     await waitFor(() => {
@@ -466,8 +498,8 @@ describe('ExperimentViewMetadataEditor', () => {
     await userEvent.type(screen.getByPlaceholderText('Enter experiment name'), 'renamed-experiment');
     await userEvent.clear(screen.getByLabelText('Description'));
     await userEvent.type(screen.getByLabelText('Description'), 'Updated description');
-    await userEvent.clear(screen.getByPlaceholderText('Enter trace archival retention (for example 30d)'));
-    await userEvent.type(screen.getByPlaceholderText('Enter trace archival retention (for example 30d)'), '14d');
+    await userEvent.clear(screen.getByLabelText('Trace archival retention'));
+    await userEvent.type(screen.getByLabelText('Trace archival retention'), '14');
     await userEvent.click(screen.getByText('Save'));
 
     expect(await screen.findByText('Rename failed')).toBeInTheDocument();

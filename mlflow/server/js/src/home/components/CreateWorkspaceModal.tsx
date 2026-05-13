@@ -5,6 +5,12 @@ import { Alert, FormUI, Modal, RHFControlledComponents, Spacer } from '@databric
 import { fetchAPI, getAjaxUrl, HTTPMethods } from '../../common/utils/FetchUtils';
 import { validateWorkspaceName } from '../../workspaces/utils/WorkspaceUtils';
 import type { WorkspaceTraceArchivalConfigInput } from '../../workspaces/types';
+import {
+  DEFAULT_TRACE_ARCHIVAL_RETENTION_UNIT,
+  formatTraceArchivalRetention,
+  getTraceArchivalRetentionValidationError,
+  type TraceArchivalRetentionUnit,
+} from '../../common/utils/traceArchival';
 import { WorkspaceSettingsFields } from './WorkspaceSettingsFields';
 
 type CreateWorkspaceFormData = {
@@ -12,13 +18,17 @@ type CreateWorkspaceFormData = {
   workspaceDescription?: string;
   workspaceArtifactRoot?: string;
   workspaceTraceArchivalLocation?: string;
-  workspaceTraceArchivalRetention?: string;
 };
 
 export const useCreateWorkspaceModal = ({ onSuccess }: { onSuccess?: (workspaceName: string) => void }) => {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [traceArchivalRetentionAmount, setTraceArchivalRetentionAmount] = useState('');
+  const [traceArchivalRetentionUnit, setTraceArchivalRetentionUnit] = useState<TraceArchivalRetentionUnit>(
+    DEFAULT_TRACE_ARCHIVAL_RETENTION_UNIT,
+  );
+  const [traceArchivalRetentionError, setTraceArchivalRetentionError] = useState<string | undefined>();
   const intl = useIntl();
 
   const form = useForm<CreateWorkspaceFormData>({
@@ -27,12 +37,36 @@ export const useCreateWorkspaceModal = ({ onSuccess }: { onSuccess?: (workspaceN
       workspaceDescription: '',
       workspaceArtifactRoot: '',
       workspaceTraceArchivalLocation: '',
-      workspaceTraceArchivalRetention: '',
     },
   });
 
+  const updateTraceArchivalRetention = ({
+    amount = traceArchivalRetentionAmount,
+    unit = traceArchivalRetentionUnit,
+  }: {
+    amount?: string;
+    unit?: TraceArchivalRetentionUnit;
+  }) => {
+    setTraceArchivalRetentionAmount(amount);
+    setTraceArchivalRetentionUnit(unit);
+    setTraceArchivalRetentionError(getTraceArchivalRetentionValidationError(amount, unit));
+  };
+
   const handleSubmit = async (values: CreateWorkspaceFormData) => {
     setError(null);
+    const traceArchivalRetention = formatTraceArchivalRetention(
+      traceArchivalRetentionAmount,
+      traceArchivalRetentionUnit,
+    );
+    const traceArchivalRetentionValidationError = getTraceArchivalRetentionValidationError(
+      traceArchivalRetentionAmount,
+      traceArchivalRetentionUnit,
+    );
+    setTraceArchivalRetentionError(traceArchivalRetentionValidationError);
+    if (traceArchivalRetentionValidationError) {
+      return;
+    }
+
     setIsLoading(true);
 
     const requestBody: {
@@ -53,7 +87,6 @@ export const useCreateWorkspaceModal = ({ onSuccess }: { onSuccess?: (workspaceN
     }
 
     const traceArchivalLocation = values.workspaceTraceArchivalLocation?.trim();
-    const traceArchivalRetention = values.workspaceTraceArchivalRetention?.trim();
     if (traceArchivalLocation || traceArchivalRetention) {
       requestBody.trace_archival_config = {};
       if (traceArchivalLocation) {
@@ -74,6 +107,7 @@ export const useCreateWorkspaceModal = ({ onSuccess }: { onSuccess?: (workspaceN
       onSuccess?.(values.workspaceName);
       setOpen(false);
       form.reset();
+      updateTraceArchivalRetention({ amount: '', unit: DEFAULT_TRACE_ARCHIVAL_RETENTION_UNIT });
     } catch (err: any) {
       setError(err?.message || 'Failed to create workspace');
     } finally {
@@ -159,7 +193,13 @@ export const useCreateWorkspaceModal = ({ onSuccess }: { onSuccess?: (workspaceN
               description: 'workspaceDescription',
               artifactRoot: 'workspaceArtifactRoot',
               traceArchivalLocation: 'workspaceTraceArchivalLocation',
-              traceArchivalRetention: 'workspaceTraceArchivalRetention',
+            }}
+            traceArchivalRetention={{
+              amount: traceArchivalRetentionAmount,
+              error: traceArchivalRetentionError,
+              onAmountChange: (amount) => updateTraceArchivalRetention({ amount }),
+              onUnitChange: (unit) => updateTraceArchivalRetention({ unit }),
+              unit: traceArchivalRetentionUnit,
             }}
           />
         </div>
@@ -170,6 +210,7 @@ export const useCreateWorkspaceModal = ({ onSuccess }: { onSuccess?: (workspaceN
   const openModal = () => {
     setError(null);
     form.reset();
+    updateTraceArchivalRetention({ amount: '', unit: DEFAULT_TRACE_ARCHIVAL_RETENTION_UNIT });
     setOpen(true);
   };
 

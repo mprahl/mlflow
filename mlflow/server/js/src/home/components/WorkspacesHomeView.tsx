@@ -17,6 +17,13 @@ import {
 import { FormProvider, useForm } from 'react-hook-form';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { Link } from '../../common/utils/RoutingUtils';
+import {
+  DEFAULT_TRACE_ARCHIVAL_RETENTION_UNIT,
+  formatTraceArchivalRetention,
+  getTraceArchivalRetentionValidationError,
+  parseTraceArchivalRetention,
+  type TraceArchivalRetentionUnit,
+} from '../../common/utils/traceArchival';
 import { useWorkspaces, type Workspace } from '../../workspaces/hooks/useWorkspaces';
 import {
   getLastUsedWorkspace,
@@ -34,7 +41,6 @@ type EditWorkspaceFormData = {
   description: string;
   defaultArtifactRoot: string;
   traceArchivalLocation: string;
-  traceArchivalRetention: string;
 };
 
 const WorkspacesEmptyState = ({ onCreateWorkspace }: { onCreateWorkspace: () => void }) => {
@@ -75,14 +81,30 @@ const WorkspaceRow = ({ workspace, isLastUsed }: { workspace: Workspace; isLastU
   const { mutate: updateWorkspace, isLoading: isPending } = useUpdateWorkspace();
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [traceArchivalRetentionAmount, setTraceArchivalRetentionAmount] = useState('');
+  const [traceArchivalRetentionUnit, setTraceArchivalRetentionUnit] = useState<TraceArchivalRetentionUnit>(
+    DEFAULT_TRACE_ARCHIVAL_RETENTION_UNIT,
+  );
+  const [traceArchivalRetentionError, setTraceArchivalRetentionError] = useState<string | undefined>();
   const form = useForm<EditWorkspaceFormData>({
     defaultValues: {
       description: '',
       defaultArtifactRoot: '',
       traceArchivalLocation: '',
-      traceArchivalRetention: '',
     },
   });
+
+  const updateTraceArchivalRetention = ({
+    amount = traceArchivalRetentionAmount,
+    unit = traceArchivalRetentionUnit,
+  }: {
+    amount?: string;
+    unit?: TraceArchivalRetentionUnit;
+  }) => {
+    setTraceArchivalRetentionAmount(amount);
+    setTraceArchivalRetentionUnit(unit);
+    setTraceArchivalRetentionError(getTraceArchivalRetentionValidationError(amount, unit));
+  };
 
   const handleNameClick = () => {
     // Persist to localStorage for UI hints then hard reload to cleanly switch workspace
@@ -97,8 +119,9 @@ const WorkspaceRow = ({ workspace, isLastUsed }: { workspace: Workspace; isLastU
       description: workspace.description ?? '',
       defaultArtifactRoot: workspace.default_artifact_root ?? '',
       traceArchivalLocation: workspace.trace_archival_config?.location ?? '',
-      traceArchivalRetention: workspace.trace_archival_config?.retention ?? '',
     });
+    const { amount, unit } = parseTraceArchivalRetention(workspace.trace_archival_config?.retention);
+    updateTraceArchivalRetention({ amount, unit });
     setIsEditModalVisible(true);
   };
 
@@ -108,7 +131,18 @@ const WorkspaceRow = ({ workspace, isLastUsed }: { workspace: Workspace; isLastU
     const currentTraceArchivalLocation = workspace.trace_archival_config?.location?.trim() ?? '';
     const currentTraceArchivalRetention = workspace.trace_archival_config?.retention?.trim() ?? '';
     const trimmedTraceArchivalLocation = values.traceArchivalLocation.trim();
-    const trimmedTraceArchivalRetention = values.traceArchivalRetention.trim();
+    const trimmedTraceArchivalRetention = formatTraceArchivalRetention(
+      traceArchivalRetentionAmount,
+      traceArchivalRetentionUnit,
+    );
+    const nextTraceArchivalRetentionError = getTraceArchivalRetentionValidationError(
+      traceArchivalRetentionAmount,
+      traceArchivalRetentionUnit,
+    );
+    setTraceArchivalRetentionError(nextTraceArchivalRetentionError);
+    if (nextTraceArchivalRetentionError) {
+      return;
+    }
 
     const hasDescriptionChanged = values.description !== currentDescription;
     const hasDefaultArtifactRootChanged = values.defaultArtifactRoot !== currentDefaultArtifactRoot;
@@ -161,6 +195,7 @@ const WorkspaceRow = ({ workspace, isLastUsed }: { workspace: Workspace; isLastU
 
   const handleCancel = () => {
     setEditError(null);
+    setTraceArchivalRetentionError(undefined);
     setIsEditModalVisible(false);
   };
 
@@ -290,7 +325,13 @@ const WorkspaceRow = ({ workspace, isLastUsed }: { workspace: Workspace; isLastU
                 description: 'description',
                 artifactRoot: 'defaultArtifactRoot',
                 traceArchivalLocation: 'traceArchivalLocation',
-                traceArchivalRetention: 'traceArchivalRetention',
+              }}
+              traceArchivalRetention={{
+                amount: traceArchivalRetentionAmount,
+                error: traceArchivalRetentionError,
+                onAmountChange: (amount) => updateTraceArchivalRetention({ amount }),
+                onUnitChange: (unit) => updateTraceArchivalRetention({ unit }),
+                unit: traceArchivalRetentionUnit,
               }}
               descriptionAutoFocus
               showClearHint

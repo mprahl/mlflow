@@ -1157,6 +1157,8 @@ module.exports = {
   "mlflow.experiment_view.header.experiment_kind_inference_popover.dismiss": "",
   "mlflow.experiment_view.header.experiment_kind_selector": "",
   "mlflow.experiment_view.header.experiment_kind_selector.tooltip": "",
+  "mlflow.experiment_view.header.trace_archival_badge": "",
+  "mlflow.experiment_view.header.trace_archival_badge_tooltip": "",
 
   // -- mlflow.experiment_view_runs_table --
   "mlflow.experiment_view_runs_table.column_header.models.tooltip": "",
