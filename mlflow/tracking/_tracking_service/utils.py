@@ -8,7 +8,12 @@ from pathlib import Path
 from typing import Generator
 from urllib.parse import unquote
 
-from mlflow.environment_variables import MLFLOW_ENABLE_WORKSPACES, MLFLOW_TRACKING_URI
+from mlflow.environment_variables import (
+    MLFLOW_ENABLE_WORKSPACES,
+    MLFLOW_TRACKING_URI,
+    MLFLOW_USE_ICEBERG_ARCHIVAL,
+)
+from mlflow.exceptions import MlflowException
 from mlflow.store.db.db_types import DATABASE_ENGINES
 from mlflow.store.tracking import DEFAULT_LOCAL_FILE_AND_ARTIFACT_PATH, DEFAULT_TRACKING_URI
 from mlflow.store.tracking.databricks_rest_store import DatabricksTracingRestStore
@@ -185,9 +190,6 @@ def _get_file_store(store_uri, **_):
 
 
 def _get_sqlalchemy_store(store_uri, artifact_uri):
-    from mlflow.store.tracking.sqlalchemy_store import SqlAlchemyStore
-    from mlflow.store.tracking.sqlalchemy_workspace_store import WorkspaceAwareSqlAlchemyStore
-
     # When running inside the server process (e.g., Model.log() triggered by a job/API),
     # inherit the server's configured artifact root from the environment rather than
     # falling back to the local default. This ensures artifacts are stored in the
@@ -197,7 +199,32 @@ def _get_sqlalchemy_store(store_uri, artifact_uri):
             _SERVER_ARTIFACT_ROOT_ENV_VAR, DEFAULT_LOCAL_FILE_AND_ARTIFACT_PATH
         )
 
-    store_cls = WorkspaceAwareSqlAlchemyStore if MLFLOW_ENABLE_WORKSPACES.get() else SqlAlchemyStore
+    use_iceberg_tracking_store = MLFLOW_USE_ICEBERG_ARCHIVAL.get()
+    if use_iceberg_tracking_store and get_uri_scheme(store_uri) not in DATABASE_ENGINES:
+        raise MlflowException(
+            "MLFLOW_USE_ICEBERG_ARCHIVAL requires a SQLAlchemy tracking URI. "
+            f"Got: {store_uri!r}."
+        )
+    if MLFLOW_ENABLE_WORKSPACES.get():
+        if use_iceberg_tracking_store:
+            from mlflow.store.tracking.iceberg_trace_backend import (
+                WorkspaceAwareIcebergSqlAlchemyStore,
+            )
+        from mlflow.store.tracking.sqlalchemy_workspace_store import (
+            WorkspaceAwareSqlAlchemyStore,
+        )
+
+        store_cls = (
+            WorkspaceAwareIcebergSqlAlchemyStore
+            if use_iceberg_tracking_store
+            else WorkspaceAwareSqlAlchemyStore
+        )
+    else:
+        if use_iceberg_tracking_store:
+            from mlflow.store.tracking.iceberg_trace_backend import IcebergSqlAlchemyStore
+        from mlflow.store.tracking.sqlalchemy_store import SqlAlchemyStore
+
+        store_cls = IcebergSqlAlchemyStore if use_iceberg_tracking_store else SqlAlchemyStore
     return store_cls(store_uri, artifact_uri)
 
 
@@ -210,7 +237,6 @@ def _get_databricks_rest_store(store_uri, **_):
 
 
 def _get_databricks_uc_rest_store(store_uri, **_):
-    from mlflow.exceptions import MlflowException
     from mlflow.version import VERSION
 
     supported_schemes = [
@@ -267,7 +293,16 @@ _register_tracking_stores()
 
 
 def _get_store(store_uri=None, artifact_uri=None):
-    return _tracking_store_registry.get_store(store_uri, artifact_uri)
+    resolved_store_uri = _resolve_tracking_uri(store_uri)
+    if (
+        MLFLOW_USE_ICEBERG_ARCHIVAL.get()
+        and _get_tracking_scheme_with_resolved_uri(resolved_store_uri) not in DATABASE_ENGINES
+    ):
+        raise MlflowException(
+            "MLFLOW_USE_ICEBERG_ARCHIVAL requires a SQLAlchemy tracking URI. "
+            f"Got: {resolved_store_uri!r}."
+        )
+    return _tracking_store_registry.get_store(resolved_store_uri, artifact_uri)
 
 
 def _get_tracking_scheme(store_uri=None) -> str:

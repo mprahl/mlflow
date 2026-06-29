@@ -143,6 +143,25 @@ def test_get_trace_archival_server_config_reloads_and_logs_changes(monkeypatch, 
     )
 
 
+def test_get_trace_archival_server_config_reads_max_trace_age(monkeypatch, tmp_path):
+    config_path = _write_trace_archival_config_lines(
+        tmp_path,
+        [
+            "trace_archival:",
+            "  enabled: true",
+            f"  location: {(tmp_path / 'archive').as_uri()}",
+            "  retention: 30d",
+            "  max_trace_age: 6h",
+        ],
+    )
+    monkeypatch.setenv(MLFLOW_TRACE_ARCHIVAL_CONFIG.name, str(config_path))
+
+    config = get_trace_archival_server_config()
+
+    assert config is not None
+    assert config.max_trace_age == "6h"
+
+
 def test_get_trace_archival_server_config_keeps_last_good_value_on_refresh_failure(
     monkeypatch, tmp_path
 ):

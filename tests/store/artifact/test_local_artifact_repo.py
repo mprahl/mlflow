@@ -461,7 +461,14 @@ def test_archived_trace_data_with_trace_data_object(local_artifact_repo):
 def test_upload_archived_trace_data_bytes(local_artifact_repo):
     trace_data = TraceData(spans=[_make_span()])
 
-    local_artifact_repo.upload_archived_trace_data_bytes(spans_to_traces_data_pb(trace_data.spans))
+    with mock.patch(
+        "mlflow.store.artifact.artifact_repo._write_local_temp_trace_data_pb_file"
+    ) as temp_file_writer:
+        local_artifact_repo.upload_archived_trace_data_bytes(
+            spans_to_traces_data_pb(trace_data.spans)
+        )
+
+    temp_file_writer.assert_not_called()
 
     restored = local_artifact_repo.download_archived_trace_data()
     assert restored.to_dict() == trace_data.to_dict()

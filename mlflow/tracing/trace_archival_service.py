@@ -31,6 +31,7 @@ _TRACE_ARCHIVAL_SCHEDULER_LAST_RUN_MONOTONIC = 0.0
 class _TraceArchivalSchedulerSettings:
     location: str
     retention: str
+    delete_payload_after_retention: bool
     long_retention_allowlist: set[str]
     interval_seconds: int
     max_traces_per_pass: int | None
@@ -123,6 +124,7 @@ def run_trace_archival_scheduler() -> int:
                     broader_retention=resolved_trace_archival_config.retention,
                     long_retention_allowlist=settings.long_retention_allowlist,
                     max_traces_per_pass=remaining_traces_per_pass,
+                    delete_payload_after_retention=settings.delete_payload_after_retention,
                 )
                 archived_total += archived_in_scope
                 if remaining_traces_per_pass is not None:
@@ -163,6 +165,7 @@ def _get_trace_archival_scheduler_settings() -> _TraceArchivalSchedulerSettings 
     return _TraceArchivalSchedulerSettings(
         location=trace_archival_config.location,
         retention=trace_archival_config.retention,
+        delete_payload_after_retention=trace_archival_config.delete_payload_after_retention,
         long_retention_allowlist=set(trace_archival_config.long_retention_allowlist),
         interval_seconds=trace_archival_config.interval_seconds,
         max_traces_per_pass=trace_archival_config.max_traces_per_pass,

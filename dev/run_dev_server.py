@@ -19,6 +19,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from urllib.parse import urlparse, urlunparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -85,9 +86,11 @@ def start_backend(port: int) -> tuple[subprocess.Popen[bytes], list[Path]]:
         print(f"Using tmp SQLite store: {db_path} (artifacts: {artifacts_path})")
     if registry_uri := os.environ.get("MLFLOW_REGISTRY_URI"):
         backend_args += ["--registry-store-uri", registry_uri]
+    if trace_archival_config := os.environ.get("MLFLOW_TRACE_ARCHIVAL_CONFIG"):
+        backend_args += ["--trace-archival-config", trace_archival_config]
 
     cmd = [sys.executable, "-m", "mlflow", "server", *backend_args, "--dev", "--port", str(port)]
-    print(f"Running tracking server: {shlex.join(cmd)}")
+    print(f"Running tracking server: {shlex.join(_display_cmd(cmd))}")
     proc = subprocess.Popen(cmd, cwd=REPO_ROOT, start_new_session=True)
     wait_ready(f"http://localhost:{port}/health", "tracking server")
     return proc, tmp_paths
@@ -123,6 +126,32 @@ def wait_ready(url: str, label: str, timeout: float = 60.0) -> None:
             pass
         time.sleep(2)
     raise SystemExit(f"Failed to launch {label} (gave up after {timeout:.0f}s)")
+
+
+def _redact_uri_userinfo(value: str) -> str:
+    parsed = urlparse(value)
+    if parsed.username is None:
+        return value
+    userinfo = parsed.username
+    if parsed.password is not None:
+        userinfo += ":***"
+    host = parsed.hostname or ""
+    if parsed.port is not None:
+        host += f":{parsed.port}"
+    return urlunparse(parsed._replace(netloc=f"{userinfo}@{host}"))
+
+
+def _display_cmd(args: list[str]) -> list[str]:
+    redacted = list(args)
+    for flag in [
+        "--backend-store-uri",
+        "--registry-store-uri",
+    ]:
+        if flag in redacted:
+            idx = redacted.index(flag)
+            if idx + 1 < len(redacted):
+                redacted[idx + 1] = _redact_uri_userinfo(redacted[idx + 1])
+    return redacted
 
 
 def main() -> None:

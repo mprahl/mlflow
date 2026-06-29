@@ -15,6 +15,11 @@ jest.mock('../../../../../pages/experiment-overview/hooks/useTraceMetricsQuery',
   useTraceMetricsQuery: (...args: any[]) => mockUseTraceMetricsQuery(...args),
 }));
 
+const mockUseAssessmentDistributionMaxTraces = jest.fn(() => 100_000);
+jest.mock('../../../../../hooks/useServerInfo', () => ({
+  useAssessmentDistributionMaxTraces: () => mockUseAssessmentDistributionMaxTraces(),
+}));
+
 describe('useAssessmentCountMetrics', () => {
   const defaultParams = {
     experimentIds: ['exp-1'],
@@ -114,5 +119,14 @@ describe('useAssessmentCountMetrics', () => {
         filters: [expect.stringContaining('run-123')],
       }),
     );
+  });
+
+  it('skips distributions known to exceed the cold trace cap', () => {
+    mockUseTraceMetricsQuery.mockReturnValue({ data: undefined, isLoading: false });
+
+    const { result } = renderHook(() => useAssessmentCountMetrics({ ...defaultParams, traceCount: 100_001 }));
+
+    expect(result.current).toEqual({ data: [], isLoading: false, isCapped: true });
+    expect(mockUseTraceMetricsQuery).toHaveBeenLastCalledWith(expect.objectContaining({ enabled: false }));
   });
 });

@@ -24,6 +24,7 @@ from mlflow.entities.logged_model import LoggedModelParameter, LoggedModelTag
 from mlflow.environment_variables import (
     MLFLOW_ENABLE_WORKSPACES,
     MLFLOW_TRACE_ARCHIVAL_CONFIG,
+    MLFLOW_USE_ICEBERG_ARCHIVAL,
     MLFLOW_WORKSPACE_STORE_URI,
 )
 from mlflow.exceptions import MlflowException
@@ -108,6 +109,7 @@ def test_server_uvicorn_options():
         run_server_mock.assert_called_once_with(
             file_store_path=mock.ANY,
             read_replica_backend_store_uri=mock.ANY,
+            use_iceberg_archival=False,
             registry_store_uri=mock.ANY,
             default_artifact_root=mock.ANY,
             serve_artifacts=mock.ANY,
@@ -133,6 +135,7 @@ def test_server_uvicorn_options():
         run_server_mock.assert_called_once_with(
             file_store_path=mock.ANY,
             read_replica_backend_store_uri=mock.ANY,
+            use_iceberg_archival=False,
             registry_store_uri=mock.ANY,
             default_artifact_root=mock.ANY,
             serve_artifacts=mock.ANY,
@@ -161,6 +164,7 @@ def test_server_dev_mode():
         run_server_mock.assert_called_once_with(
             file_store_path=mock.ANY,
             read_replica_backend_store_uri=mock.ANY,
+            use_iceberg_archival=False,
             registry_store_uri=mock.ANY,
             default_artifact_root=mock.ANY,
             serve_artifacts=mock.ANY,
@@ -189,6 +193,7 @@ def test_server_gunicorn_options():
         run_server_mock.assert_called_once_with(
             file_store_path=mock.ANY,
             read_replica_backend_store_uri=mock.ANY,
+            use_iceberg_archival=False,
             registry_store_uri=mock.ANY,
             default_artifact_root=mock.ANY,
             serve_artifacts=mock.ANY,
@@ -228,7 +233,12 @@ def test_server_initializes_backend_store_when_tracking_enabled():
             result = runner.invoke(server)
     assert result.exit_code == 0
     init_backend_mock.assert_called_once_with(
-        mock.ANY, mock.ANY, mock.ANY, workspace_store_uri=None, read_replica_backend_store_uri=None
+        mock.ANY,
+        mock.ANY,
+        mock.ANY,
+        workspace_store_uri=None,
+        read_replica_backend_store_uri=None,
+        use_iceberg_archival=False,
     )
     run_server_mock.assert_called_once()
 
@@ -345,6 +355,23 @@ def test_server_artifacts_only_conflicts_with_trace_archival_config_env_var(tmp_
         MLFLOW_TRACE_ARCHIVAL_CONFIG.unset()
 
 
+def test_server_artifacts_only_conflicts_with_use_iceberg_archival_env_var():
+    MLFLOW_USE_ICEBERG_ARCHIVAL.set("true")
+    try:
+        with pytest.raises(
+            click.UsageError,
+            match="MLFLOW_USE_ICEBERG_ARCHIVAL cannot be combined with --artifacts-only",
+        ):
+            CliRunner().invoke(
+                server,
+                ["--artifacts-only"],
+                catch_exceptions=False,
+                standalone_mode=False,
+            )
+    finally:
+        MLFLOW_USE_ICEBERG_ARCHIVAL.unset()
+
+
 def test_server_workspace_uri_sets_env_when_workspaces_enabled(tmp_path):
     handlers._tracking_store = None
     handlers._model_registry_store = None
@@ -387,6 +414,7 @@ def test_server_workspace_uri_sets_env_when_workspaces_enabled(tmp_path):
             artifact_root,
             workspace_store_uri=workspace_uri,
             read_replica_backend_store_uri=None,
+            use_iceberg_archival=False,
         )
         assert MLFLOW_WORKSPACE_STORE_URI.get() == workspace_uri
         assert MLFLOW_ENABLE_WORKSPACES.get() is True
@@ -436,6 +464,71 @@ def test_server_trace_archival_config_sets_env(tmp_path):
         assert MLFLOW_TRACE_ARCHIVAL_CONFIG.get() == str(config_path)
     finally:
         MLFLOW_TRACE_ARCHIVAL_CONFIG.unset()
+
+
+def test_server_use_iceberg_archival_sets_env(tmp_path):
+    handlers._tracking_store = None
+    handlers._model_registry_store = None
+    backend_uri = f"sqlite:///{tmp_path / 'backend.db'}"
+    artifact_root = (tmp_path / "artifacts").as_uri()
+
+    MLFLOW_USE_ICEBERG_ARCHIVAL.unset()
+
+    try:
+        with (
+            mock.patch("mlflow.server._run_server") as run_server_mock,
+            mock.patch("mlflow.server.handlers.initialize_backend_stores") as init_backend,
+        ):
+            result = CliRunner().invoke(
+                server,
+                [
+                    "--backend-store-uri",
+                    backend_uri,
+                    "--registry-store-uri",
+                    backend_uri,
+                    "--default-artifact-root",
+                    artifact_root,
+                ],
+                catch_exceptions=False,
+                standalone_mode=False,
+                env={**os.environ, MLFLOW_USE_ICEBERG_ARCHIVAL.name: "true"},
+            )
+        assert result.exit_code == 0
+        run_server_mock.assert_called_once()
+        init_backend.assert_called_once_with(
+            backend_uri,
+            backend_uri,
+            artifact_root,
+            workspace_store_uri=None,
+            read_replica_backend_store_uri=None,
+            use_iceberg_archival=True,
+        )
+    finally:
+        MLFLOW_USE_ICEBERG_ARCHIVAL.unset()
+
+
+def test_server_use_iceberg_archival_requires_sqlalchemy_backend(tmp_path):
+    handlers._tracking_store = None
+    handlers._model_registry_store = None
+    artifact_root = (tmp_path / "artifacts").as_uri()
+    with (
+        mock.patch("mlflow.server._run_server") as run_server_mock,
+        mock.patch("mlflow.server.handlers._get_model_registry_store", return_value=None),
+    ):
+        result = CliRunner().invoke(
+            server,
+            [
+                "--backend-store-uri",
+                "file:///tmp/mlruns",
+                "--default-artifact-root",
+                artifact_root,
+            ],
+            env={**os.environ, MLFLOW_USE_ICEBERG_ARCHIVAL.name: "true"},
+        )
+
+    assert result.exit_code != 0
+    assert "Error initializing backend store" in result.output
+    run_server_mock.assert_not_called()
 
 
 def test_server_trace_archival_config_env_var_sets_env(tmp_path):
@@ -689,6 +782,8 @@ def test_tracking_uri_validation_failure(command):
 def test_tracking_uri_validation_sql_driver_uris(command):
     handlers._tracking_store = None
     handlers._model_registry_store = None
+    MLFLOW_ENABLE_WORKSPACES.unset()
+    MLFLOW_USE_ICEBERG_ARCHIVAL.unset()
     with (
         mock.patch("mlflow.server._run_server") as run_server_mock,
         mock.patch("mlflow.store.tracking.sqlalchemy_store.SqlAlchemyStore"),
@@ -1118,6 +1213,8 @@ def test_mlflow_gc_sqlite_with_s3_artifact_repository(
 def test_mlflow_tracking_disabled_in_artifacts_only_mode(tmp_path: Path):
     port = get_safe_port()
     env = {**os.environ}
+    env.pop(MLFLOW_ENABLE_WORKSPACES.name, None)
+    env.pop(MLFLOW_USE_ICEBERG_ARCHIVAL.name, None)
     env.pop(MLFLOW_TRACE_ARCHIVAL_CONFIG.name, None)
     with subprocess.Popen(
         [sys.executable, "-m", "mlflow", "server", "--port", str(port), "--artifacts-only"],
@@ -1138,6 +1235,8 @@ def test_mlflow_tracking_disabled_in_artifacts_only_mode(tmp_path: Path):
 def test_mlflow_artifact_list_in_artifacts_only_mode(tmp_path: Path):
     port = get_safe_port()
     env = {**os.environ}
+    env.pop(MLFLOW_ENABLE_WORKSPACES.name, None)
+    env.pop(MLFLOW_USE_ICEBERG_ARCHIVAL.name, None)
     env.pop(MLFLOW_TRACE_ARCHIVAL_CONFIG.name, None)
     with subprocess.Popen(
         [sys.executable, "-m", "mlflow", "server", "--port", str(port), "--artifacts-only"],

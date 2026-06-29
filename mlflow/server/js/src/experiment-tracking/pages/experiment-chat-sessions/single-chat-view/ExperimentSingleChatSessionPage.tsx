@@ -1,12 +1,9 @@
 import ErrorUtils from '@mlflow/mlflow/src/common/utils/ErrorUtils';
 import { withErrorBoundary } from '@mlflow/mlflow/src/common/utils/withErrorBoundary';
 import { FormattedMessage } from '@mlflow/mlflow/src/i18n/i18n';
-import type { GetTraceFunction } from '@databricks/web-shared/genai-traces-table';
 import {
   createTraceLocationForExperiment,
-  createTraceLocationForDestinationPath,
-  doesTraceSupportV4API,
-  useGetTraces,
+  useGetTracesBatch,
   useSearchMlflowTraces,
 } from '@databricks/web-shared/genai-traces-table';
 
@@ -28,13 +25,11 @@ import {
   ModelTraceExplorerUpdateTraceContextProvider,
   ModelTraceExplorerPreferencesProvider,
   shouldEnableAssessmentsInSessions,
-  shouldUseTracesV4API,
 } from '@databricks/web-shared/model-trace-explorer';
 import {
   ExperimentSingleChatSessionSidebar,
   ExperimentSingleChatSessionSidebarSkeleton,
 } from './ExperimentSingleChatSessionSidebar';
-import { getTrace as getTraceV3 } from '@mlflow/mlflow/src/experiment-tracking/utils/TraceUtils';
 import { getChatSessionsFilter } from '../utils';
 import {
   ExperimentSingleChatConversation,
@@ -121,13 +116,12 @@ const ExperimentSingleChatSessionPageImpl = () => {
 
   const chatSessionMetrics = useExperimentSingleChatMetrics({ traceInfos: sortedTraceInfos });
 
-  const getTrace = getTraceV3;
   const getAssessmentTitle = useCallback((assessmentName: string) => assessmentName, []);
   const {
     data: traces,
     isLoading: isLoadingTraceDatas,
     invalidateSingleTraceQuery,
-  } = useGetTraces(getTrace, sortedTraceInfos);
+  } = useGetTracesBatch(sortedTraceInfos);
 
   useEffect(() => {
     if (selectedTraceIdFromUrl && traces && traces.length > 0 && !isLoadingTraceDatas) {

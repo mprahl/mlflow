@@ -953,6 +953,130 @@ class SqlTraceMetadata(Base):
     )
 
 
+class SqlIcebergTable(Base):
+    __tablename__ = "iceberg_tables"
+
+    catalog_name = Column(String(255), nullable=False)
+    table_namespace = Column(String(255), nullable=False)
+    table_name = Column(String(255), nullable=False)
+    metadata_location = Column(String(1000), nullable=True)
+    previous_metadata_location = Column(String(1000), nullable=True)
+
+    __table_args__ = (
+        PrimaryKeyConstraint(
+            "catalog_name",
+            "table_namespace",
+            "table_name",
+            name="iceberg_tables_pk",
+        ),
+    )
+
+
+class SqlIcebergNamespaceProperty(Base):
+    __tablename__ = "iceberg_namespace_properties"
+
+    catalog_name = Column(String(255), nullable=False)
+    namespace = Column(String(255), nullable=False)
+    property_key = Column(String(255), nullable=False)
+    property_value = Column(String(1000), nullable=False)
+
+    __table_args__ = (
+        PrimaryKeyConstraint(
+            "catalog_name",
+            "namespace",
+            "property_key",
+            name="iceberg_namespace_properties_pk",
+        ),
+    )
+
+
+class SqlIcebergTracePublicationState(Base):
+    __tablename__ = "iceberg_trace_publication_state"
+
+    state_key = Column(String(32), nullable=False, default="default")
+    """
+    Singleton key for the published Iceberg cut. This stays a table rather than a
+    process-local cache so hybrid readers can agree on the same SQL-published
+    metadata locations across replicas.
+    """
+
+    trace_index_metadata_location = Column(String(1000), nullable=True)
+    trace_tag_index_metadata_location = Column(String(1000), nullable=True)
+    span_index_metadata_location = Column(String(1000), nullable=True)
+    assessment_index_metadata_location = Column(String(1000), nullable=True)
+    trace_metric_daily_rollups_metadata_location = Column(String(1000), nullable=True)
+    span_cost_daily_rollups_metadata_location = Column(String(1000), nullable=True)
+    assessment_daily_rollups_metadata_location = Column(String(1000), nullable=True)
+    session_summary_metadata_location = Column(String(1000), nullable=True)
+
+    trace_index_snapshot_id = Column(BigInteger, nullable=True)
+    trace_tag_index_snapshot_id = Column(BigInteger, nullable=True)
+    span_index_snapshot_id = Column(BigInteger, nullable=True)
+    assessment_index_snapshot_id = Column(BigInteger, nullable=True)
+    trace_metric_daily_rollups_snapshot_id = Column(BigInteger, nullable=True)
+    span_cost_daily_rollups_snapshot_id = Column(BigInteger, nullable=True)
+    assessment_daily_rollups_snapshot_id = Column(BigInteger, nullable=True)
+    session_summary_snapshot_id = Column(BigInteger, nullable=True)
+
+    publication_blocked = Column(Boolean, nullable=False, default=False, server_default="0")
+    """
+    Prevents publication of live Iceberg table heads while an append round is in progress or
+    after cleanup leaves the warehouse in an uncertain state.
+    """
+
+    published_at_ms = Column(BigInteger, nullable=False, default=get_current_time_millis)
+
+    __table_args__ = (PrimaryKeyConstraint("state_key", name="iceberg_trace_publication_state_pk"),)
+
+
+class SqlArchivedTraceLocator(Base):
+    __tablename__ = "archived_trace_locators"
+
+    workspace = Column(String(255), nullable=False, default=DEFAULT_WORKSPACE_NAME)
+    """
+    Workspace scope retained for correctness even though Iceberg is no longer
+    partitioned primarily by workspace. This keeps archived point lookups safe in
+    multi-workspace deployments where the same trace_id can exist more than once.
+    """
+
+    experiment_id = Column(Integer, nullable=False)
+    """
+    Experiment ID that owns the archived trace. This remains available after the
+    heavy SQL trace rows are evicted and is the main pruning key for archived
+    point lookups.
+    """
+
+    trace_id = Column(String(50), nullable=False)
+    """
+    Trace ID for archived point lookups.
+    """
+
+    request_time_ms = Column(BigInteger, nullable=False)
+    request_day = Column(Date, nullable=False)
+    archive_uri = Column(String(2000), nullable=True)
+    published_at_ms = Column(BigInteger, nullable=False, default=get_current_time_millis)
+
+    __table_args__ = (
+        PrimaryKeyConstraint(
+            "workspace",
+            "experiment_id",
+            "trace_id",
+            name="archived_trace_locators_pk",
+        ),
+        Index("index_archived_trace_locators_workspace_trace_id", "workspace", "trace_id"),
+        Index(
+            "index_archived_trace_locators_experiment_id_request_time_ms",
+            "experiment_id",
+            "request_time_ms",
+        ),
+        Index(
+            "index_archived_trace_locators_experiment_id_request_day",
+            "experiment_id",
+            "request_day",
+        ),
+    )
+
+
 class SqlTraceMetricDailyRollup(Base):
     __tablename__ = "sql_trace_metric_daily_rollups"
 

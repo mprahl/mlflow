@@ -1,11 +1,19 @@
+from unittest import mock
+
 import pytest
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
+from mlflow.environment_variables import MLFLOW_USE_ICEBERG_ARCHIVAL
 from mlflow.exceptions import MlflowException
-from mlflow.server.fastapi_app import add_mcp_exception_handlers, create_fastapi_app
+from mlflow.server import handlers
+from mlflow.server.fastapi_app import (
+    add_iceberg_query_warmup,
+    add_mcp_exception_handlers,
+    create_fastapi_app,
+)
 
 
 @pytest.fixture
@@ -45,3 +53,16 @@ def test_mcp_exception_handler_delegates_for_non_mcp_routes():
 
     assert response.status_code == 418
     assert response.json() == {"detail": "delegated"}
+
+
+def test_iceberg_query_resources_are_warmed_on_startup(monkeypatch):
+    warmup = mock.Mock()
+    store = mock.Mock(warm_iceberg_trace_query_resources=warmup)
+    monkeypatch.setattr(MLFLOW_USE_ICEBERG_ARCHIVAL, "get", lambda: True)
+    monkeypatch.setattr(handlers, "_get_tracking_store", lambda: store)
+    app = FastAPI()
+
+    add_iceberg_query_warmup(app)
+    app.router.on_startup[0]()
+
+    warmup.assert_called_once_with()

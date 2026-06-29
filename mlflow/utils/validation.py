@@ -214,6 +214,15 @@ def _validate_trace_archival_location(value: Any, *, parameter_name: str | None 
         raise MlflowException.invalid_parameter_value(
             "Trace archival location cannot use the proxy-only `mlflow-artifacts:` scheme."
         )
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        if parameter_name is not None:
+            raise MlflowException.invalid_parameter_value(
+                f"Invalid value for '{parameter_name}'. Trace archival location must not "
+                "embed credentials, query parameters, or fragments."
+            )
+        raise MlflowException.invalid_parameter_value(
+            "Trace archival location must not embed credentials, query parameters, or fragments."
+        )
     return trimmed
 
 

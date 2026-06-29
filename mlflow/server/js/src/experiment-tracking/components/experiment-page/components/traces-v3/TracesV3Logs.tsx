@@ -9,6 +9,7 @@ import {
   Drawer,
   DesignSystemEventProviderAnalyticsEventTypes,
   DesignSystemEventProviderComponentTypes,
+  Alert,
 } from '@databricks/design-system';
 import { useLogTelemetryEvent } from '../../../../../telemetry/hooks/useLogTelemetryEvent';
 import type {
@@ -390,7 +391,7 @@ const TracesV3LogsImpl = React.memo(
         ),
       traceInfosLoading,
       metadataTotalCount: totalCount,
-      disabled: isQueryDisabled,
+      disabled: isQueryDisabled || isMetadataLoading || traceInfosFetching,
       countSessions: forceGroupBySession,
     });
 
@@ -404,6 +405,8 @@ const TracesV3LogsImpl = React.memo(
       enabled:
         shouldUseInfinitePaginatedTraces() &&
         !isQueryDisabled &&
+        !isMetadataLoading &&
+        !traceInfosFetching &&
         !!singleExperimentId &&
         !firedCountTelemetryForExperiments.has(singleExperimentId),
     });
@@ -431,7 +434,8 @@ const TracesV3LogsImpl = React.memo(
     const assessmentCountMetrics = useAssessmentCountMetrics({
       experimentIds,
       timeRange,
-      disabled: isQueryDisabled,
+      disabled: isQueryDisabled || isMetadataLoading || traceInfosFetching || countInfo.logCountLoading,
+      traceCount: countInfo.totalCount,
     });
 
     // Loading state:
@@ -613,6 +617,18 @@ const TracesV3LogsImpl = React.memo(
               onDetectIssues={disableActions ? undefined : () => setIsIssueDetectionModalOpen(true)}
             />
             {JudgesStatusBanner}
+            {assessmentCountMetrics?.isCapped && (
+              <Alert
+                componentId="mlflow.traces.assessment-distribution-capped"
+                type="warning"
+                closable={false}
+                message={intl.formatMessage({
+                  defaultMessage:
+                    'Assessment value counts are based on loaded traces because the selected range is too large for an exact archived distribution. Narrow the time range for exact counts.',
+                  description: 'Warning shown when an exact archived assessment distribution exceeds the server limit',
+                })}
+              />
+            )}
             {renderMainContent()}
           </div>
           {!disableActions && isIssueDetectionModalOpen && (

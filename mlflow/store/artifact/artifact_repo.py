@@ -8,6 +8,7 @@ import uuid
 from abc import ABC, ABCMeta, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
+from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, BinaryIO
 
@@ -493,8 +494,13 @@ class ArtifactRepository:
         Overriding is useful for remote object stores where direct byte uploads can reduce local
         disk I/O and let the backend apply transport-specific optimizations.
         """
-        with _write_local_temp_trace_data_pb_file(data) as temp_file:
-            self.log_artifact(temp_file)
+        from mlflow.tracing.otel.otel_archival import TRACE_ARCHIVAL_FILENAME
+
+        if isinstance(self, StreamUploadMixin):
+            self.log_artifact_from_stream(BytesIO(data), TRACE_ARCHIVAL_FILENAME)
+        else:
+            with _write_local_temp_trace_data_pb_file(data) as temp_file:
+                self.log_artifact(temp_file)
 
     def upload_attachment(self, attachment_id: str, content_bytes: bytes) -> None:
         _validate_attachment_path(attachment_id)

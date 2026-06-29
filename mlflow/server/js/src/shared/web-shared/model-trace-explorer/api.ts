@@ -2,6 +2,7 @@ import invariant from 'invariant';
 import { first, isString } from 'lodash';
 
 import type {
+  ModelTrace,
   ModelTraceSpan,
   Assessment,
   Expectation,
@@ -254,6 +255,32 @@ export const getExperimentTraceV3 = ({ traceId }: { traceId: string }) => {
   return fetchAPI(urlWithParams, 'GET');
 };
 
+export const getBatchTracesV3 = async ({
+  traceIds,
+}: {
+  traceIds: string[];
+}): Promise<{ traces: Array<ModelTrace & { info: ModelTraceInfoV3 }> }> => {
+  const endpointPath = getAjaxUrl(`ajax-api/3.0/mlflow/traces/batchGet`);
+
+  const queryParams = new URLSearchParams();
+  for (const traceId of traceIds) {
+    queryParams.append('trace_ids', traceId);
+  }
+
+  const urlWithParams = `${endpointPath}?${queryParams.toString()}`;
+  const data: { traces: { trace_info: ModelTraceInfoV3; spans: ModelTraceSpanV3[] }[] } = await fetchAPI(
+    urlWithParams,
+    'GET',
+  );
+
+  return {
+    traces: data.traces.map((trace) => ({
+      info: trace.trace_info,
+      data: { spans: trace.spans },
+    })),
+  };
+};
+
 /**
  * Fetch function for V4 traces.
  * TraceV3 is the same format for V4 traces
@@ -421,4 +448,5 @@ export const TracesServiceV3 = {
   getTraceV3Info,
   getTraceV3Data,
   getTraceV3,
+  getBatchTracesV3,
 };

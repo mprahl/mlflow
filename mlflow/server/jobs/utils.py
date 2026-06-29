@@ -28,6 +28,9 @@ from mlflow.environment_variables import (
 )
 from mlflow.exceptions import MlflowException
 from mlflow.server.constants import HUEY_STORAGE_PATH_ENV_VAR, MLFLOW_SERVER_UP_TIME
+from mlflow.store.tracking.iceberg_trace_compaction_service import (
+    run_iceberg_trace_compaction_scheduler,
+)
 from mlflow.tracing.trace_archival_service import run_trace_archival_scheduler
 from mlflow.utils.environment import _PythonEnv
 from mlflow.utils.import_hooks import register_post_import_hook
@@ -808,6 +811,21 @@ def register_periodic_tasks(huey_instance) -> None:
     _logger.info(
         "Registered trace_archival_scheduler periodic task (polls every 1 minute and "
         "no-ops when trace archival is disabled or unconfigured)"
+    )
+
+    @huey_instance.periodic_task(crontab(minute="*/1"))
+    # Prevent concurrent execution if a compaction pass takes longer than 1 minute.
+    @huey_instance.lock_task("iceberg-trace-compaction-scheduler-lock")
+    def iceberg_trace_compaction_scheduler():
+        """Runs every minute and delegates compaction cadence to the compaction service."""
+        try:
+            run_iceberg_trace_compaction_scheduler()
+        except Exception as e:
+            _logger.exception(f"Iceberg trace compaction scheduler failed: {e!r}")
+
+    _logger.info(
+        "Registered iceberg_trace_compaction_scheduler periodic task (polls every 1 minute and "
+        "no-ops when Iceberg trace compaction is disabled or unconfigured)"
     )
 
     @huey_instance.periodic_task(crontab(minute="*/1"))

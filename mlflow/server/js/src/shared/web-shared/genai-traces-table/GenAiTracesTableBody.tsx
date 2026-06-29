@@ -546,8 +546,14 @@ export const GenAiTracesTableBody = React.memo(
     // use them for categorical assessments to get accurate counts across all traces.
     const assessmentNameToAggregates = useMemo(() => {
       const result: Record<string, AssessmentAggregates> = {};
-      const currentData = !assessmentCountMetrics?.isLoading ? assessmentCountMetrics?.data : undefined;
-      const otherData = !compareAssessmentCountMetrics?.isLoading ? compareAssessmentCountMetrics?.data : undefined;
+      const currentData =
+        !assessmentCountMetrics?.isLoading && !assessmentCountMetrics?.isCapped
+          ? assessmentCountMetrics?.data
+          : undefined;
+      const otherData =
+        !compareAssessmentCountMetrics?.isLoading && !compareAssessmentCountMetrics?.isCapped
+          ? compareAssessmentCountMetrics?.data
+          : undefined;
       for (const assessmentInfo of selectedAssessmentInfos) {
         // The synthetic "Result" assessment exists only on the loaded traces (no
         // server-side count metric), so always aggregate it from the traces;

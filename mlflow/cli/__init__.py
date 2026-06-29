@@ -26,6 +26,7 @@ from mlflow.environment_variables import (
     MLFLOW_EXPERIMENT_ID,
     MLFLOW_EXPERIMENT_NAME,
     MLFLOW_TRACE_ARCHIVAL_CONFIG,
+    MLFLOW_USE_ICEBERG_ARCHIVAL,
     MLFLOW_WORKSPACE,
     MLFLOW_WORKSPACE_STORE_URI,
 )
@@ -669,11 +670,13 @@ def server(
     default_artifact_root = resolve_default_artifact_root(
         serve_artifacts, default_artifact_root, backend_store_uri
     )
+    use_iceberg_archival = MLFLOW_USE_ICEBERG_ARCHIVAL.get()
     artifacts_only_config_validation(
         artifacts_only,
         backend_store_uri,
         enable_workspaces,
         trace_archival_config_path=str(trace_archival_config) if trace_archival_config else None,
+        use_iceberg_archival=use_iceberg_archival,
     )
     if trace_archival_config is not None:
         try:
@@ -684,6 +687,7 @@ def server(
     # Keep environment flag in sync with the resolved boolean so server-side gating
     # (which reads MLFLOW_ENABLE_WORKSPACES.get()) has a single source of truth.
     os.environ[MLFLOW_ENABLE_WORKSPACES.name] = "true" if enable_workspaces else "false"
+    os.environ[MLFLOW_USE_ICEBERG_ARCHIVAL.name] = "true" if use_iceberg_archival else "false"
     if enable_workspaces and workspace_store_uri:
         os.environ[MLFLOW_WORKSPACE_STORE_URI.name] = workspace_store_uri
     elif workspace_store_uri:
@@ -703,6 +707,7 @@ def server(
                 default_artifact_root,
                 workspace_store_uri=workspace_store_uri,
                 read_replica_backend_store_uri=read_replica_backend_store_uri,
+                use_iceberg_archival=use_iceberg_archival,
             )
         except Exception as e:
             _logger.error("Error initializing backend store")
@@ -772,6 +777,7 @@ def server(
             env_file=env_file,
             secrets_cache_ttl=secrets_cache_ttl,
             secrets_cache_max_size=secrets_cache_max_size,
+            use_iceberg_archival=use_iceberg_archival,
         )
     except ShellCommandException:
         eprint("Running the mlflow server failed. Please see the logs above for details.")

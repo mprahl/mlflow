@@ -419,6 +419,7 @@ def test_server_info():
         assert data["store_type"] == "SqlStore"
         assert data["workspaces_enabled"] is False
         assert data["trace_archival_enabled"] is False
+        assert data["assessment_distribution_max_traces"] == 0
 
 
 def test_server_info_trace_archival_enabled(monkeypatch):
@@ -427,12 +428,14 @@ def test_server_info_trace_archival_enabled(monkeypatch):
         mock.Mock(return_value=mock.Mock(enabled=True)),
     )
     monkeypatch.setattr("mlflow.server.handlers._store_supports_trace_archival", lambda store: True)
+    monkeypatch.setenv("MLFLOW_ICEBERG_TRACE_ASSESSMENT_DISTRIBUTION_MAX_TRACES", "123")
 
     with app.test_client() as c:
         response = c.get("/api/3.0/mlflow/server-info")
         assert response.status_code == 200
         data = response.get_json()
         assert data["trace_archival_enabled"] is True
+        assert data["assessment_distribution_max_traces"] == 123
 
 
 def test_server_info_handles_invalid_trace_archival_config(monkeypatch):

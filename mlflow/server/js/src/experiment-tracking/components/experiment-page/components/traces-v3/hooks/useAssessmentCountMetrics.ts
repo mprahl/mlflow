@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { shouldUseInfinitePaginatedTraces } from '@databricks/web-shared/genai-traces-table';
 import type { AssessmentCountMetrics } from '@databricks/web-shared/genai-traces-table';
 import { useTraceMetricsQuery } from '../../../../../pages/experiment-overview/hooks/useTraceMetricsQuery';
+import { useAssessmentDistributionMaxTraces } from '../../../../../hooks/useServerInfo';
 import {
   MetricViewType,
   AggregationType,
@@ -24,14 +25,18 @@ export function useAssessmentCountMetrics({
   runUuid,
   timeRange,
   disabled,
+  traceCount,
 }: {
   experimentIds: string[];
   runUuid?: string;
   timeRange?: { startTime?: string; endTime?: string };
   disabled: boolean;
+  traceCount?: number;
 }): AssessmentCountMetrics | undefined {
   const usingInfinitePagination = shouldUseInfinitePaginatedTraces();
-  const enabled = usingInfinitePagination && !disabled;
+  const maxTraces = useAssessmentDistributionMaxTraces();
+  const isKnownCapped = Boolean(maxTraces && traceCount !== undefined && traceCount > maxTraces);
+  const enabled = usingInfinitePagination && !disabled && !isKnownCapped;
 
   const filters = useMemo(
     () => (runUuid ? [createTraceMetadataFilter('mlflow.sourceRun', runUuid)] : undefined),
@@ -41,7 +46,7 @@ export function useAssessmentCountMetrics({
   const startTimeMs = timeRange?.startTime ? Number(timeRange.startTime) : undefined;
   const endTimeMs = timeRange?.endTime ? Number(timeRange.endTime) : undefined;
 
-  const { data, isLoading } = useTraceMetricsQuery({
+  const { data, isLoading, error } = useTraceMetricsQuery({
     experimentIds,
     viewType: MetricViewType.ASSESSMENTS,
     metricName: AssessmentMetricKey.ASSESSMENT_COUNT,
@@ -52,8 +57,13 @@ export function useAssessmentCountMetrics({
     enabled,
     filters,
   });
+  const isServerCapped =
+    error instanceof Error && error.message.includes('Exact assessment value distribution is unavailable');
 
   return useMemo(() => {
+    if (!usingInfinitePagination) return undefined;
+    if (isKnownCapped || isServerCapped) return { data: [], isLoading: false, isCapped: true };
+    if (error) return undefined;
     if (!enabled) return undefined;
 
     const metrics =
@@ -63,6 +73,6 @@ export function useAssessmentCountMetrics({
         count: dp.values[AggregationType.COUNT] ?? 0,
       })) ?? [];
 
-    return { data: metrics, isLoading };
-  }, [enabled, data, isLoading]);
+    return { data: metrics, isLoading, isCapped: false };
+  }, [usingInfinitePagination, isKnownCapped, isServerCapped, error, enabled, data, isLoading]);
 }

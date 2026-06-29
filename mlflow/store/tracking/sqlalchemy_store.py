@@ -3540,6 +3540,10 @@ class SqlAlchemyStore(SqlAlchemyMCPServerRegistryMixin, SqlAlchemyGatewayStoreMi
         return self._run_with_deadlock_retry(self._start_trace_once, trace_info)
 
     def _start_trace_once(self, trace_info: "TraceInfo") -> TraceInfo:
+        self._validate_trace_ingest_timestamp_ms(
+            trace_info.request_time,
+            parameter_name="trace_info.request_time",
+        )
         with self.ManagedSessionMaker(read_only=False) as session:
             experiment = self.get_experiment(trace_info.experiment_id)
             self._check_experiment_is_active(experiment)
@@ -6573,6 +6577,10 @@ class SqlAlchemyStore(SqlAlchemyMCPServerRegistryMixin, SqlAlchemyGatewayStoreMi
         all_span_rows = []
         for trace_id, trace_spans in spans_by_trace.items():
             min_start_ms = min(s.start_time_ns for s in trace_spans) // 1_000_000
+            self._validate_trace_ingest_timestamp_ms(
+                min_start_ms,
+                parameter_name=f"log_spans[{trace_id}].min_start_time_ms",
+            )
             end_times = [s.end_time_ns for s in trace_spans if s.end_time_ns is not None]
             max_end_ms = (max(end_times) // 1_000_000) if end_times else None
             root_span_status = self._get_trace_status_from_root_span(trace_spans)
@@ -7204,6 +7212,31 @@ class SqlAlchemyStore(SqlAlchemyMCPServerRegistryMixin, SqlAlchemyGatewayStoreMi
         """
         # TODO: Implement proper async support
         return self.log_spans(location, spans)
+
+    def _get_max_trace_age_millis(self) -> int | None:
+        trace_archival_config = get_trace_archival_server_config()
+        if trace_archival_config is None or not trace_archival_config.enabled:
+            return None
+        return _parse_trace_archival_duration_millis(trace_archival_config.max_trace_age)
+
+    def _validate_trace_ingest_timestamp_ms(
+        self,
+        timestamp_ms: int | None,
+        *,
+        parameter_name: str,
+    ) -> None:
+        if timestamp_ms is None:
+            return
+        max_trace_age_millis = self._get_max_trace_age_millis()
+        if max_trace_age_millis is None:
+            return
+        cutoff_ms = get_current_time_millis() - max_trace_age_millis
+        if timestamp_ms >= cutoff_ms:
+            return
+        raise MlflowException.invalid_parameter_value(
+            f"Invalid value for '{parameter_name}'. Trace start/request time must not be older "
+            f"than {max_trace_age_millis // (60 * 60 * 1000)}h based on server policy."
+        )
 
     def _get_trace_status_from_root_span(self, spans: list[Span]) -> str | None:
         """
@@ -8015,6 +8048,47 @@ class SqlAlchemyStore(SqlAlchemyMCPServerRegistryMixin, SqlAlchemyGatewayStoreMi
                 return None
 
             return trace_info, sql_trace_info.db_payload_generation, span_rows
+
+    def _load_trace_archival_data_batch(
+        self, trace_ids: list[str]
+    ) -> dict[str, tuple[TraceInfo, int, list[tuple[str, str]]]]:
+        if not trace_ids:
+            return {}
+        with self.ManagedSessionMaker() as session:
+            sql_trace_infos = (
+                self
+                ._trace_query(session)
+                .options(
+                    selectinload(SqlTraceInfo.tags),
+                    selectinload(SqlTraceInfo.request_metadata),
+                    selectinload(SqlTraceInfo.assessments),
+                )
+                .filter(SqlTraceInfo.request_id.in_(trace_ids))
+                .all()
+            )
+            span_rows_by_trace_id: dict[str, list[tuple[str, str]]] = defaultdict(list)
+            for trace_id, span_id, content in (
+                session
+                .query(SqlSpan.trace_id, SqlSpan.span_id, SqlSpan.content)
+                .filter(SqlSpan.trace_id.in_(trace_ids))
+                .order_by(SqlSpan.trace_id, SqlSpan.span_id)
+                .all()
+            ):
+                span_rows_by_trace_id[trace_id].append((span_id, content))
+
+            archival_data_by_trace_id = {}
+            for sql_trace_info in sql_trace_infos:
+                trace_id = sql_trace_info.request_id
+                span_rows = span_rows_by_trace_id.get(trace_id, [])
+                trace_info = sql_trace_info.to_mlflow_entity()
+                if not self._is_trace_actionable_for_archival(trace_info, span_rows):
+                    continue
+                archival_data_by_trace_id[trace_id] = (
+                    trace_info,
+                    sql_trace_info.db_payload_generation,
+                    span_rows,
+                )
+            return archival_data_by_trace_id
 
     def _serialize_trace_archival_span_rows_to_pb(self, span_rows: list[tuple[str, str]]) -> bytes:
         try:

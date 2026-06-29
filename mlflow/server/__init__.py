@@ -327,6 +327,7 @@ def _run_server(
     *,
     file_store_path,
     read_replica_backend_store_uri=None,
+    use_iceberg_archival=False,
     registry_store_uri,
     default_artifact_root,
     serve_artifacts,
@@ -361,6 +362,8 @@ def _run_server(
         env_map[BACKEND_STORE_URI_ENV_VAR] = file_store_path
     if read_replica_backend_store_uri:
         env_map[READ_REPLICA_BACKEND_STORE_URI_ENV_VAR] = read_replica_backend_store_uri
+    if use_iceberg_archival:
+        env_map["MLFLOW_USE_ICEBERG_ARCHIVAL"] = "true"
     if registry_store_uri:
         env_map[REGISTRY_STORE_URI_ENV_VAR] = registry_store_uri
     if default_artifact_root:

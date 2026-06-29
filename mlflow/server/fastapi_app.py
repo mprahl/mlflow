@@ -19,6 +19,7 @@ from flask import Flask
 from starlette.middleware.wsgi import WSGIResponder, build_environ
 from starlette.types import Receive, Scope, Send
 
+from mlflow.environment_variables import MLFLOW_USE_ICEBERG_ARCHIVAL
 from mlflow.exceptions import MlflowException
 from mlflow.gateway.constants import MLFLOW_GATEWAY_DURATION_HEADER, MLFLOW_GATEWAY_OVERHEAD_HEADER
 from mlflow.gateway.providers.utils import provider_call_duration_ms
@@ -193,6 +194,20 @@ def add_mcp_exception_handlers(fastapi_app: FastAPI) -> None:
     fastapi_app.state.mcp_exception_handlers_added = True
 
 
+def add_iceberg_query_warmup(fastapi_app: FastAPI) -> None:
+    if not MLFLOW_USE_ICEBERG_ARCHIVAL.get():
+        return
+
+    def warm_iceberg_query_resources() -> None:
+        from mlflow.server.handlers import _get_tracking_store
+
+        store = _get_tracking_store()
+        if warmup := getattr(store, "warm_iceberg_trace_query_resources", None):
+            warmup()
+
+    fastapi_app.router.add_event_handler("startup", warm_iceberg_query_resources)
+
+
 def create_fastapi_app(flask_app: Flask = flask_app):
     """
     Create a FastAPI application that wraps the existing Flask app.
@@ -217,6 +232,7 @@ def create_fastapi_app(flask_app: Flask = flask_app):
 
     add_fastapi_workspace_middleware(fastapi_app)
     add_gateway_timing_middleware(fastapi_app)
+    add_iceberg_query_warmup(fastapi_app)
 
     # Include OpenTelemetry API router BEFORE mounting Flask app
     # This ensures FastAPI routes take precedence over the catch-all Flask mount

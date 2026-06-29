@@ -10,6 +10,7 @@ interface ServerInfoResponse {
   store_type: string | null;
   workspaces_enabled: boolean;
   trace_archival_enabled: boolean;
+  assessment_distribution_max_traces: number;
 }
 
 // Default response when the API call fails (e.g., older server without this endpoint)
@@ -17,6 +18,7 @@ const DEFAULT_RESPONSE: ServerInfoResponse = {
   store_type: '',
   workspaces_enabled: false,
   trace_archival_enabled: false,
+  assessment_distribution_max_traces: 0,
 };
 
 // Module-level reference to the QueryClient for synchronous access
@@ -64,6 +66,11 @@ export function useIsFileStore(): boolean | undefined {
 export function useTraceArchivalEnabled(): boolean {
   const { data } = useServerInfo();
   return data?.trace_archival_enabled ?? false;
+}
+
+export function useAssessmentDistributionMaxTraces(): number {
+  const { data } = useServerInfo();
+  return data?.assessment_distribution_max_traces ?? 0;
 }
 
 interface ServerInfoProviderProps {

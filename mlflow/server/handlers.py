@@ -75,6 +75,7 @@ from mlflow.environment_variables import (
     MLFLOW_DEPLOYMENTS_TARGET,
     MLFLOW_ENABLE_WORKSPACES,
     MLFLOW_PRESIGNED_DOWNLOAD_URL_TTL_SECONDS,
+    MLFLOW_USE_ICEBERG_ARCHIVAL,
 )
 from mlflow.exceptions import (
     MlflowException,
@@ -379,7 +380,12 @@ from mlflow.utils.providers import (
 )
 from mlflow.utils.string_utils import is_string_type
 from mlflow.utils.time import get_current_time_millis
-from mlflow.utils.uri import is_local_uri, validate_path_is_safe, validate_query_string
+from mlflow.utils.uri import (
+    get_uri_scheme,
+    is_local_uri,
+    validate_path_is_safe,
+    validate_query_string,
+)
 from mlflow.utils.validation import (
     _validate_batch_log_api_req,
     _validate_experiment_artifact_location,
@@ -438,15 +444,29 @@ class TrackingStoreRegistryWrapper(TrackingStoreRegistry):
     @classmethod
     def _get_sqlalchemy_store(cls, store_uri, artifact_uri):
         from mlflow.server.constants import READ_REPLICA_BACKEND_STORE_URI_ENV_VAR
-        from mlflow.store.tracking.sqlalchemy_store import SqlAlchemyStore
-        from mlflow.store.tracking.sqlalchemy_workspace_store import (
-            WorkspaceAwareSqlAlchemyStore,
-        )
 
         read_db_uri = os.environ.get(READ_REPLICA_BACKEND_STORE_URI_ENV_VAR, None)
-        store_cls = (
-            WorkspaceAwareSqlAlchemyStore if MLFLOW_ENABLE_WORKSPACES.get() else SqlAlchemyStore
-        )
+        use_iceberg_tracking_store = MLFLOW_USE_ICEBERG_ARCHIVAL.get()
+        if MLFLOW_ENABLE_WORKSPACES.get():
+            if use_iceberg_tracking_store:
+                from mlflow.store.tracking.iceberg_trace_backend import (
+                    WorkspaceAwareIcebergSqlAlchemyStore,
+                )
+            from mlflow.store.tracking.sqlalchemy_workspace_store import (
+                WorkspaceAwareSqlAlchemyStore,
+            )
+
+            store_cls = (
+                WorkspaceAwareIcebergSqlAlchemyStore
+                if use_iceberg_tracking_store
+                else WorkspaceAwareSqlAlchemyStore
+            )
+        else:
+            if use_iceberg_tracking_store:
+                from mlflow.store.tracking.iceberg_trace_backend import IcebergSqlAlchemyStore
+            from mlflow.store.tracking.sqlalchemy_store import SqlAlchemyStore
+
+            store_cls = IcebergSqlAlchemyStore if use_iceberg_tracking_store else SqlAlchemyStore
         return store_cls(store_uri, artifact_uri, read_db_uri=read_db_uri)
 
     @classmethod
@@ -476,14 +496,16 @@ class ModelRegistryStoreRegistryWrapper(ModelRegistryStoreRegistry):
     def _get_sqlalchemy_store(cls, store_uri):
         from mlflow.server.constants import READ_REPLICA_BACKEND_STORE_URI_ENV_VAR
         from mlflow.store.model_registry.sqlalchemy_store import SqlAlchemyStore
-        from mlflow.store.model_registry.sqlalchemy_workspace_store import (
-            WorkspaceAwareSqlAlchemyStore,
-        )
 
         read_db_uri = os.environ.get(READ_REPLICA_BACKEND_STORE_URI_ENV_VAR, None)
-        store_cls = (
-            WorkspaceAwareSqlAlchemyStore if MLFLOW_ENABLE_WORKSPACES.get() else SqlAlchemyStore
-        )
+        if MLFLOW_ENABLE_WORKSPACES.get():
+            from mlflow.store.model_registry.sqlalchemy_workspace_store import (
+                WorkspaceAwareSqlAlchemyStore,
+            )
+
+            store_cls = WorkspaceAwareSqlAlchemyStore
+        else:
+            store_cls = SqlAlchemyStore
         return store_cls(store_uri, read_db_uri=read_db_uri)
 
     @classmethod
@@ -734,12 +756,28 @@ def initialize_backend_stores(
     default_artifact_root: str | None = None,
     workspace_store_uri: str | None = None,
     read_replica_backend_store_uri: str | None = None,
+    use_iceberg_archival: bool = False,
 ) -> None:
     from mlflow.server.constants import READ_REPLICA_BACKEND_STORE_URI_ENV_VAR
 
     # Set the read backend store URI env var so _get_sqlalchemy_store can pick it up
     if read_replica_backend_store_uri:
         os.environ[READ_REPLICA_BACKEND_STORE_URI_ENV_VAR] = read_replica_backend_store_uri
+    if use_iceberg_archival:
+        os.environ[MLFLOW_USE_ICEBERG_ARCHIVAL.name] = "true"
+    else:
+        MLFLOW_USE_ICEBERG_ARCHIVAL.unset()
+
+    if (
+        use_iceberg_archival
+        and backend_store_uri is not None
+        and get_uri_scheme(backend_store_uri) not in DATABASE_ENGINES
+    ):
+        raise MlflowException(
+            "MLFLOW_USE_ICEBERG_ARCHIVAL requires a SQLAlchemy backend store URI. "
+            f"Got: {backend_store_uri!r}.",
+            error_code=INVALID_STATE,
+        )
 
     tracking_store = _get_tracking_store(backend_store_uri, default_artifact_root)
     registry_store = None
@@ -6584,6 +6622,9 @@ def _update_endpoint_guardrail_config():
 
 @catch_mlflow_exception
 def _get_server_info():
+    from mlflow.environment_variables import (
+        MLFLOW_ICEBERG_TRACE_ASSESSMENT_DISTRIBUTION_MAX_TRACES,
+    )
     from mlflow.store.tracking.file_store import FileStore
     from mlflow.store.tracking.sqlalchemy_store import SqlAlchemyStore
 
@@ -6613,6 +6654,11 @@ def _get_server_info():
         "store_type": store_type,
         "workspaces_enabled": MLFLOW_ENABLE_WORKSPACES.get(),
         "trace_archival_enabled": trace_archival_enabled,
+        "assessment_distribution_max_traces": (
+            MLFLOW_ICEBERG_TRACE_ASSESSMENT_DISTRIBUTION_MAX_TRACES.get()
+            if trace_archival_enabled or MLFLOW_USE_ICEBERG_ARCHIVAL.get()
+            else 0
+        ),
     })
 
 

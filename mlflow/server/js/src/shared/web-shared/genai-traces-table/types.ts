@@ -139,6 +139,7 @@ export interface AssessmentAggregates {
 export interface AssessmentCountMetrics {
   data: { assessmentName: string; assessmentValue: string; count: number }[];
   isLoading: boolean;
+  isCapped?: boolean;
 }
 
 export interface EvaluationsOverviewTableSort {

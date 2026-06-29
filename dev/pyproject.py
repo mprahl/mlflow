@@ -370,6 +370,10 @@ def build(package_type: PackageType) -> None:
                     "azure-storage-blob>=12",
                     "azure-identity>=1.6.1",
                 ],
+                "iceberg": [
+                    "duckdb<2",
+                    "pyiceberg[sql-sqlite,pyarrow,duckdb]<1",
+                ],
                 "sqlserver": ["mlflow-dbstore"],
                 "aliyun-oss": ["aliyunstoreplugin"],
                 "jfrog": ["mlflow-jfrog-plugin"],

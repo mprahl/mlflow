@@ -8,8 +8,13 @@ import sqlalchemy
 import sqlalchemy.orm
 
 from mlflow.entities import Metric, ViewType
+from mlflow.environment_variables import MLFLOW_ENABLE_WORKSPACES, MLFLOW_USE_ICEBERG_ARCHIVAL
 from mlflow.exceptions import MlflowException
 from mlflow.store.db.utils import _get_routing_session_maker
+from mlflow.store.tracking.iceberg_trace_backend import (
+    IcebergSqlAlchemyStore,
+    WorkspaceAwareIcebergSqlAlchemyStore,
+)
 from mlflow.store.tracking.sqlalchemy_store import SqlAlchemyStore
 
 ARTIFACT_URI = "artifact_folder"
@@ -180,6 +185,42 @@ def test_backward_compat_log_and_get_metrics(store_no_replica):
     assert history[0].value == 0.95
 
 
+def test_default_tracking_store_uses_plain_sqlalchemy(tmp_path: Path, write_db_uri):
+    artifact_uri = tmp_path / "artifacts"
+    artifact_uri.mkdir(exist_ok=True)
+    store = SqlAlchemyStore(write_db_uri, str(artifact_uri))
+    assert isinstance(store, SqlAlchemyStore)
+
+
+def test_use_iceberg_archival_requires_sqlalchemy_backend(
+    tmp_path: Path, write_db_uri, monkeypatch
+):
+    from mlflow.server.handlers import initialize_backend_stores
+
+    artifact_uri = tmp_path / "artifacts"
+    artifact_uri.mkdir(exist_ok=True)
+    monkeypatch.setenv(MLFLOW_USE_ICEBERG_ARCHIVAL.name, "true")
+
+    with pytest.raises(MlflowException, match="requires a SQLAlchemy backend store URI"):
+        initialize_backend_stores(
+            backend_store_uri="file:///tmp/mlruns",
+            default_artifact_root=str(artifact_uri),
+            use_iceberg_archival=True,
+        )
+
+
+def test_workspace_store_uses_iceberg_when_enabled(tmp_path: Path, write_db_uri, monkeypatch):
+    artifact_uri = tmp_path / "artifacts"
+    artifact_uri.mkdir(exist_ok=True)
+    monkeypatch.setenv(MLFLOW_ENABLE_WORKSPACES.name, "true")
+    monkeypatch.setenv(MLFLOW_USE_ICEBERG_ARCHIVAL.name, "true")
+    store = WorkspaceAwareIcebergSqlAlchemyStore(write_db_uri, str(artifact_uri))
+    try:
+        assert isinstance(store, WorkspaceAwareIcebergSqlAlchemyStore)
+    finally:
+        store._dispose_engine()
+
+
 # --- TestServerWiring ---
 
 
@@ -213,6 +254,36 @@ def test_run_server_passes_read_uri_env_var():
                     break
         assert READ_REPLICA_BACKEND_STORE_URI_ENV_VAR in env_map
         assert env_map[READ_REPLICA_BACKEND_STORE_URI_ENV_VAR] == "sqlite:///read.db"
+
+
+def test_run_server_passes_use_iceberg_archival_env_var():
+    from mlflow.server import _run_server
+
+    with mock.patch("mlflow.server._exec_cmd") as mock_exec:
+        mock_exec.side_effect = SystemExit(0)
+        try:
+            _run_server(
+                file_store_path="sqlite:///test.db",
+                use_iceberg_archival=True,
+                registry_store_uri=None,
+                default_artifact_root="/tmp/artifacts",
+                serve_artifacts=False,
+                artifacts_only=False,
+                artifacts_destination=None,
+                host="127.0.0.1",
+                port=5000,
+            )
+        except SystemExit:
+            pass
+
+        call_kwargs = mock_exec.call_args
+        env_map = call_kwargs[1].get("extra_env", {}) if call_kwargs[1] else {}
+        if not env_map and call_kwargs[0]:
+            for arg in call_kwargs[0]:
+                if isinstance(arg, dict):
+                    env_map = arg
+                    break
+        assert env_map[MLFLOW_USE_ICEBERG_ARCHIVAL.name] == "true"
 
 
 def test_run_server_omits_read_uri_when_none():
@@ -271,6 +342,24 @@ def test_initialize_backend_stores_sets_env_var():
         )  # clint: disable=os-environ-delete-in-test
 
 
+def test_initialize_backend_stores_sets_iceberg_env_var():
+    from mlflow.server.handlers import initialize_backend_stores
+
+    MLFLOW_USE_ICEBERG_ARCHIVAL.unset()
+    try:
+        with (
+            mock.patch("mlflow.server.handlers._get_tracking_store"),
+            mock.patch("mlflow.server.handlers._get_model_registry_store"),
+        ):
+            initialize_backend_stores(
+                backend_store_uri="sqlite:///test.db",
+                use_iceberg_archival=True,
+            )
+            assert MLFLOW_USE_ICEBERG_ARCHIVAL.get() is True
+    finally:
+        MLFLOW_USE_ICEBERG_ARCHIVAL.unset()
+
+
 def test_get_sqlalchemy_store_reads_env_var(tmp_path, monkeypatch):
     from mlflow.server.constants import READ_REPLICA_BACKEND_STORE_URI_ENV_VAR
     from mlflow.server.handlers import TrackingStoreRegistryWrapper
@@ -287,6 +376,17 @@ def test_get_sqlalchemy_store_reads_env_var(tmp_path, monkeypatch):
         write_uri, str(tmp_path / "artifacts")
     )
     assert store.read_engine is not None
+
+
+def test_get_sqlalchemy_store_reads_use_iceberg_archival_env_var(tmp_path, monkeypatch):
+    from mlflow.server.handlers import TrackingStoreRegistryWrapper
+
+    write_uri = f"sqlite:///{tmp_path / 'write.db'}"
+    monkeypatch.setenv(MLFLOW_USE_ICEBERG_ARCHIVAL.name, "true")
+    store = TrackingStoreRegistryWrapper._get_sqlalchemy_store(
+        write_uri, str(tmp_path / "artifacts")
+    )
+    assert isinstance(store, IcebergSqlAlchemyStore)
 
 
 # --- TestReadOnlyAnnotations ---

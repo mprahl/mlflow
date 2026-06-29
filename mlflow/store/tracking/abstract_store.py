@@ -417,6 +417,7 @@ class AbstractStore(MCPServerRegistryMixin, GatewayStoreMixin):
         broader_retention: str,
         long_retention_allowlist: set[str] | list[str] | None = None,
         max_traces_per_pass: int | None = None,
+        delete_payload_after_retention: bool = False,
     ) -> int:
         """
         Archive eligible DB-backed trace payloads into the archival repository.

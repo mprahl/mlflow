@@ -17,8 +17,14 @@ Model Registry `Archived` stage.
 
 ## What Trace Archival Does
 
-After a trace is archived, MLflow keeps the trace metadata and archive pointer in the tracking
-store, then reads the span payloads from archive storage when you open the trace.
+After a trace is archived, MLflow continues to serve it without keeping the full span payloads in
+the SQL tracking store:
+
+- In the classic SQL archival path, MLflow keeps the trace metadata and archive pointer in the
+  tracking store, then reads the span payloads from archive storage when you open the trace.
+- In the Iceberg hybrid archival path, MLflow publishes the archived trace metadata to Iceberg,
+  stores a lightweight locator in SQL, and deletes the hot `trace_info` row as part of the same
+  publication step.
 
 This helps reduce the amount of trace content stored in the SQL backend while preserving access to
 older traces for debugging, auditing, and evaluation workflows.
@@ -67,7 +73,8 @@ When the effective retention is known, MLflow surfaces it in trace-focused exper
 ::::warning Archival cannot be undone
 MLflow does not currently support restoring archived span payloads back to the tracking store.
 Archived traces remain readable, but once archival completes, the trace continues to be served from
-archive storage rather than the database.
+archive storage rather than the database. In Iceberg hybrid mode, the trace metadata is also served
+from Iceberg plus archived-trace locators instead of the original SQL row.
 ::::
 
 ### Before You Configure Retention

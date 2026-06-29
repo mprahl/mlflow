@@ -35,6 +35,8 @@ class TraceArchivalServerConfig:
     enabled: bool
     location: str
     retention: str
+    max_trace_age: str = "24h"
+    delete_payload_after_retention: bool = False
     long_retention_allowlist: tuple[str, ...] = ()
     interval_seconds: int = _TRACE_ARCHIVAL_INTERVAL_SECONDS_DEFAULT
     max_traces_per_pass: int | None = None
@@ -118,6 +120,16 @@ def load_trace_archival_server_config(
         _get_required_value(trace_archival, path, "retention"),
         parameter_name=f"{_TRACE_ARCHIVAL_CONFIG_KEY}.retention",
     )
+    max_trace_age = _validate_trace_archival_retention_string(
+        trace_archival.get("max_trace_age", "24h"),
+        parameter_name=f"{_TRACE_ARCHIVAL_CONFIG_KEY}.max_trace_age",
+    )
+    delete_payload_after_retention = _get_optional_bool(
+        trace_archival,
+        path,
+        "delete_payload_after_retention",
+        default=False,
+    )
     long_retention_allowlist = _parse_long_retention_allowlist(
         trace_archival.get("long_retention_allowlist"),
         path,
@@ -137,6 +149,8 @@ def load_trace_archival_server_config(
         enabled=enabled,
         location=location,
         retention=retention,
+        max_trace_age=max_trace_age,
+        delete_payload_after_retention=delete_payload_after_retention,
         long_retention_allowlist=long_retention_allowlist,
         interval_seconds=interval_seconds,
         max_traces_per_pass=max_traces_per_pass,
@@ -188,6 +202,24 @@ def _get_required_value(payload: dict[str, Any], path: Path, key: str) -> Any:
 
 def _get_required_bool(payload: dict[str, Any], path: Path, key: str) -> bool:
     value = _get_required_value(payload, path, key)
+    if isinstance(value, bool):
+        return value
+    raise _invalid_trace_archival_config(
+        path,
+        f"'{_TRACE_ARCHIVAL_CONFIG_KEY}.{key}' must be a boolean.",
+    )
+
+
+def _get_optional_bool(
+    payload: dict[str, Any],
+    path: Path,
+    key: str,
+    *,
+    default: bool,
+) -> bool:
+    if key not in payload:
+        return default
+    value = payload[key]
     if isinstance(value, bool):
         return value
     raise _invalid_trace_archival_config(

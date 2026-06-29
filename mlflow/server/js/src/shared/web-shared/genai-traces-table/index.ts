@@ -142,7 +142,7 @@ export { doesTraceSupportV4API } from './utils/TraceLocationUtils';
 export { GenAIChatSessionsTable } from './sessions-table/GenAIChatSessionsTable';
 export { groupTracesBySession } from './sessions-table/utils';
 export { GenAITracesTableBodySkeleton } from './GenAITracesTableBodySkeleton';
-export { useGetTraces } from './hooks/useGetTraces';
+export { useGetTraces, useGetTracesBatch } from './hooks/useGetTraces';
 export { useGetTrace } from './hooks/useGetTrace';
 export { ActiveEvaluationContext, useActiveEvaluation } from './hooks/useActiveEvaluation';
 export { isSqlWarehouseTimeoutError } from './utils/ErrorUtils';

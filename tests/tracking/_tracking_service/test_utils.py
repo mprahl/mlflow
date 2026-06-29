@@ -19,12 +19,14 @@ from mlflow.environment_variables import (
     MLFLOW_TRACKING_TOKEN,
     MLFLOW_TRACKING_URI,
     MLFLOW_TRACKING_USERNAME,
+    MLFLOW_USE_ICEBERG_ARCHIVAL,
 )
 from mlflow.exceptions import MlflowException
 from mlflow.server import ARTIFACT_ROOT_ENV_VAR
 from mlflow.store.db.db_types import DATABASE_ENGINES
 from mlflow.store.tracking.databricks_rest_store import DatabricksTracingRestStore
 from mlflow.store.tracking.file_store import FileStore
+from mlflow.store.tracking.iceberg_trace_backend import IcebergSqlAlchemyStore
 from mlflow.store.tracking.rest_store import RestStore
 from mlflow.store.tracking.sqlalchemy_store import SqlAlchemyStore
 from mlflow.tracking._tracking_service.registry import TrackingStoreRegistry
@@ -301,6 +303,33 @@ def test_get_sqlalchemy_store_uses_server_artifact_root(tmp_path, monkeypatch):
     mock_store.assert_called_once()
     assert mock_store.call_args.args[1] == artifact_uri
     monkeypatch.delenv(ARTIFACT_ROOT_ENV_VAR, raising=False)
+
+
+def test_get_sqlalchemy_store_uses_regular_sqlalchemy_by_default(tmp_path, monkeypatch):
+    store_uri = f"sqlite:///{tmp_path.joinpath('backend_store.db')}"
+    artifact_uri = path_to_local_file_uri(tmp_path / "artifacts")
+    store = mlflow.tracking._tracking_service.utils._get_sqlalchemy_store(
+        store_uri=store_uri, artifact_uri=artifact_uri
+    )
+    try:
+        assert isinstance(store, SqlAlchemyStore)
+        assert not isinstance(store, IcebergSqlAlchemyStore)
+    finally:
+        store._dispose_engine()
+
+
+def test_get_sqlalchemy_store_reads_use_iceberg_archival_env_var(tmp_path, monkeypatch):
+    store_uri = f"sqlite:///{tmp_path.joinpath('backend_store.db')}"
+    artifact_uri = path_to_local_file_uri(tmp_path / "artifacts")
+    monkeypatch.setenv(MLFLOW_USE_ICEBERG_ARCHIVAL.name, "true")
+
+    store = mlflow.tracking._tracking_service.utils._get_sqlalchemy_store(
+        store_uri=store_uri, artifact_uri=artifact_uri
+    )
+    try:
+        assert isinstance(store, IcebergSqlAlchemyStore)
+    finally:
+        store._dispose_engine()
 
 
 def test_get_store_databricks(monkeypatch):

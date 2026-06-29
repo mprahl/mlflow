@@ -126,7 +126,7 @@ def message_to_json(message):
     json_dict_with_int64_as_numbers = _merge_json_dicts(
         json_dict_with_int64_fields_only, json_dict_with_int64_as_str
     )
-    return json.dumps(json_dict_with_int64_as_numbers, indent=2)
+    return json.dumps(json_dict_with_int64_as_numbers, separators=(",", ":"))
 
 
 def proto_timestamp_to_milliseconds(timestamp: str) -> int:

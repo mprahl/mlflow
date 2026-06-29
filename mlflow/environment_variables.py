@@ -110,6 +110,114 @@ MLFLOW_REGISTRY_URI = _EnvironmentVariable("MLFLOW_REGISTRY_URI", str, None)
 #: Defaults to the tracking URI when unset.
 MLFLOW_WORKSPACE_STORE_URI = _EnvironmentVariable("MLFLOW_WORKSPACE_STORE_URI", str, None)
 
+#: Switches SQLAlchemy tracking stores to the Iceberg-backed trace archival implementation.
+#: When unset, traces use the regular SQLAlchemy tracking store only.
+MLFLOW_USE_ICEBERG_ARCHIVAL = _BooleanEnvironmentVariable("MLFLOW_USE_ICEBERG_ARCHIVAL", False)
+
+#: Specifies the Iceberg warehouse location for the Iceberg trace backend.
+#: Accepts either a local filesystem path or a warehouse URI such as ``s3://...``.
+#: When unset, SQLite-backed tracking stores default to a sibling ``iceberg/warehouse`` path.
+#: Non-SQLite tracking stores must set this explicitly when Iceberg archival is enabled.
+MLFLOW_ICEBERG_WAREHOUSE_URI = _EnvironmentVariable("MLFLOW_ICEBERG_WAREHOUSE_URI", str, None)
+
+#: Enables the built-in scheduled compaction job for the Iceberg trace backend.
+#: When enabled, the server's periodic job runner bin-packs small data files, rewrites
+#: deduplicated trace/span/assessment rows, and expires old snapshots on a fixed cadence.
+#: (default: ``False``)
+MLFLOW_ICEBERG_TRACE_COMPACTION_ENABLED = _BooleanEnvironmentVariable(
+    "MLFLOW_ICEBERG_TRACE_COMPACTION_ENABLED", False
+)
+
+#: Minimum number of seconds between runs of the Iceberg trace backend compaction job.
+#: The periodic task runner polls every minute and no-ops until this interval has elapsed.
+#: (default: ``86400`` — once per day)
+MLFLOW_ICEBERG_TRACE_COMPACTION_INTERVAL_SECONDS = _EnvironmentVariable(
+    "MLFLOW_ICEBERG_TRACE_COMPACTION_INTERVAL_SECONDS", int, 86400
+)
+
+#: Enables the built-in scheduled SQL trace rollup job for SQLAlchemy tracking stores.
+#: When enabled, the periodic job runner builds immutable daily rollup rows for historical
+#: dashboard metric queries. With Iceberg archival, SQL rollups accelerate hot-data queries
+#: until their source partitions are published to Iceberg.
+#: (default: ``False``)
+MLFLOW_SQL_TRACE_ROLLUPS_ENABLED = _BooleanEnvironmentVariable(
+    "MLFLOW_SQL_TRACE_ROLLUPS_ENABLED", False
+)
+
+#: Five-field UTC cron schedule for SQL trace rollup passes.
+#: The periodic task runner polls every minute and runs when the current UTC minute matches.
+#: (default: ``0 2 * * *`` — daily at 02:00 UTC)
+MLFLOW_TRACE_ROLLUPS_SCHEDULE = _EnvironmentVariable(
+    "MLFLOW_TRACE_ROLLUPS_SCHEDULE", str, "0 2 * * *"
+)
+
+#: Maximum number of SQL trace rollup partitions to build in one scheduler pass.
+#: (default: ``100``)
+MLFLOW_SQL_TRACE_ROLLUPS_MAX_PARTITIONS_PER_PASS = _EnvironmentVariable(
+    "MLFLOW_SQL_TRACE_ROLLUPS_MAX_PARTITIONS_PER_PASS", int, 100
+)
+
+#: Enables detailed Iceberg trace backend query profiling logs.
+#: Intended for benchmark/debug runs; logs scan planning and DuckDB execution timings.
+#: (default: ``False``)
+MLFLOW_ICEBERG_TRACE_QUERY_PROFILE = _BooleanEnvironmentVariable(
+    "MLFLOW_ICEBERG_TRACE_QUERY_PROFILE", False
+)
+
+#: Number of DuckDB connections available to concurrent Iceberg trace queries in each server
+#: worker process. Total connections scale with the number of server workers.
+#: (default: ``2``)
+MLFLOW_ICEBERG_TRACE_DUCKDB_POOL_SIZE = _EnvironmentVariable(
+    "MLFLOW_ICEBERG_TRACE_DUCKDB_POOL_SIZE", int, 2
+)
+
+#: Maximum DuckDB worker threads per Iceberg query connection. This limit is per connection and
+#: per server process, so deployments should size it together with the server worker count and
+#: ``MLFLOW_ICEBERG_TRACE_DUCKDB_POOL_SIZE``.
+#: (default: ``2``)
+MLFLOW_ICEBERG_TRACE_DUCKDB_THREADS = _EnvironmentVariable(
+    "MLFLOW_ICEBERG_TRACE_DUCKDB_THREADS", int, 2
+)
+
+#: Maximum number of archived traces that an exact assessment name/value distribution may scan.
+#: These distributions intentionally bypass bounded daily rollups and can otherwise monopolize
+#: query resources at large scale. Set to ``0`` to disable the limit.
+#: (default: ``100000``)
+MLFLOW_ICEBERG_TRACE_ASSESSMENT_DISTRIBUTION_MAX_TRACES = _EnvironmentVariable(
+    "MLFLOW_ICEBERG_TRACE_ASSESSMENT_DISTRIBUTION_MAX_TRACES", int, 100_000
+)
+
+#: Maximum number of concurrent workers used to stage trace archival projections in the
+#: Iceberg trace backend. Keep this small on laptops because each worker may decode spans,
+#: upload payloads, and materialize projection rows in parallel.
+#: (default: ``2``)
+MLFLOW_ICEBERG_TRACE_ARCHIVE_MAX_WORKERS = _EnvironmentVariable(
+    "MLFLOW_ICEBERG_TRACE_ARCHIVE_MAX_WORKERS", int, 2
+)
+
+#: Maximum number of experiments whose trace archival pipelines may run concurrently.
+#: Each experiment has an independent writer lock, while compaction and other warehouse-wide
+#: maintenance retain an exclusive global lock.
+#: (default: ``2``)
+MLFLOW_ICEBERG_TRACE_ARCHIVE_EXPERIMENT_MAX_WORKERS = _EnvironmentVariable(
+    "MLFLOW_ICEBERG_TRACE_ARCHIVE_EXPERIMENT_MAX_WORKERS", int, 2
+)
+
+#: Maximum number of candidate traces processed per archival projection chunk in the Iceberg
+#: trace backend. Larger values reduce per-chunk overhead but increase transient memory use.
+#: (default: ``1000``)
+MLFLOW_ICEBERG_TRACE_ARCHIVE_PROJECT_BATCH_SIZE = _EnvironmentVariable(
+    "MLFLOW_ICEBERG_TRACE_ARCHIVE_PROJECT_BATCH_SIZE", int, 1000
+)
+
+#: Maximum number of archival projection chunks per experiment that share one Iceberg rollup
+#: refresh and publication. Larger values reduce repeated partition rebuilds but increase the
+#: number of staged projections held until publication.
+#: (default: ``10``)
+MLFLOW_ICEBERG_TRACE_ARCHIVE_ROLLUP_REFRESH_CHUNKS = _EnvironmentVariable(
+    "MLFLOW_ICEBERG_TRACE_ARCHIVE_ROLLUP_REFRESH_CHUNKS", int, 10
+)
+
 #: Enables workspace-aware behavior for MLflow servers and clients.
 #: When set, requests can include a workspace. Some workspace providers support default workspaces.
 #: (default: ``False``)

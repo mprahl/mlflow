@@ -68,6 +68,7 @@ def artifacts_only_config_validation(
     backend_store_uri: str,
     enable_workspaces: bool = False,
     trace_archival_config_path: str | None = None,
+    use_iceberg_archival: bool = False,
 ) -> None:
     if artifacts_only and enable_workspaces:
         # Workspace mode relies on a workspace provider to resolve the default workspace and seed
@@ -90,4 +91,10 @@ def artifacts_only_config_validation(
             "--trace-archival-config cannot be combined with --artifacts-only because "
             "artifact-only servers do not initialize the tracking store required for "
             "server-owned trace archival."
+        )
+    if use_iceberg_archival:
+        raise click.UsageError(
+            "MLFLOW_USE_ICEBERG_ARCHIVAL cannot be combined with --artifacts-only because "
+            "artifact-only servers do not initialize the tracking store required for "
+            "Iceberg-backed trace archival."
         )
