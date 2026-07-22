@@ -35,6 +35,7 @@ from mlflow.entities import (
 from mlflow.entities.entity_type import EntityAssociationType
 from mlflow.entities.lifecycle_stage import LifecycleStage
 from mlflow.entities.trace_location import TraceLocation
+from mlflow.entities.trace_metrics import AggregationType, MetricAggregation, MetricViewType
 from mlflow.entities.trace_state import TraceState
 from mlflow.entities.workspace import TraceArchivalConfig
 from mlflow.environment_variables import MLFLOW_ENABLE_WORKSPACES
@@ -1301,6 +1302,42 @@ def test_create_assessment_validates_trace_workspace(workspace_tracking_store):
 
         with pytest.raises(MlflowException, match=r"Trace with ID .* not found"):
             workspace_tracking_store.create_assessment(feedback)
+
+
+def test_query_assessment_metrics_are_workspace_scoped(workspace_tracking_store):
+    source = AssessmentSource(source_type="HUMAN", source_id="user@example.com")
+
+    with WorkspaceContext("team-assessment-metrics-a"):
+        exp_a = workspace_tracking_store.create_experiment("exp-assessment-metrics-a")
+        _create_trace(workspace_tracking_store, "trace-a", exp_a)
+        workspace_tracking_store.create_assessment(
+            Feedback(trace_id="trace-a", name="quality", value=True, source=source)
+        )
+
+    with WorkspaceContext("team-assessment-metrics-b"):
+        exp_b = workspace_tracking_store.create_experiment("exp-assessment-metrics-b")
+        _create_trace(workspace_tracking_store, "trace-b", exp_b)
+        workspace_tracking_store.create_assessment(
+            Feedback(trace_id="trace-b", name="quality", value=False, source=source)
+        )
+
+        result = workspace_tracking_store.query_trace_metrics(
+            experiment_ids=[exp_b],
+            view_type=MetricViewType.ASSESSMENTS,
+            metric_name="assessment_count",
+            aggregations=[MetricAggregation(aggregation_type=AggregationType.COUNT)],
+        )
+        assert len(result) == 1
+        assert result[0].values == {"COUNT": 1}
+
+        cross_workspace_result = workspace_tracking_store.query_trace_metrics(
+            experiment_ids=[exp_a],
+            view_type=MetricViewType.ASSESSMENTS,
+            metric_name="assessment_count",
+            aggregations=[MetricAggregation(aggregation_type=AggregationType.COUNT)],
+        )
+        assert len(cross_workspace_result) == 1
+        assert cross_workspace_result[0].values == {"COUNT": 0}
 
 
 def test_calculate_trace_filter_correlation_filters_experiment_ids(workspace_tracking_store):

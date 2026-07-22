@@ -540,7 +540,7 @@ class GatewayStoreMixin:
         workspace: str | None = None,
     ) -> float:
         """
-        Sum total_cost from span metrics for gateway traces within a time range.
+        Sum authoritative trace total costs for gateway traces within a time range.
 
         Args:
             start_time_ms: Window start in epoch milliseconds (inclusive).

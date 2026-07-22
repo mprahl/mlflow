@@ -2,6 +2,7 @@ import json
 import uuid
 from dataclasses import asdict
 from datetime import datetime, timezone
+from unittest import mock
 
 import numpy as np
 import pytest
@@ -20,15 +21,20 @@ from mlflow.entities.trace_info import TraceInfo
 from mlflow.entities.trace_metrics import (
     AggregationType,
     MetricAggregation,
+    MetricDataPoint,
     MetricViewType,
 )
 from mlflow.entities.trace_status import TraceStatus
+from mlflow.environment_variables import MLFLOW_SQL_TRACE_ROLLUPS_ENABLED
 from mlflow.exceptions import MlflowException
 from mlflow.genai.judges import CategoricalRating
+from mlflow.store.db.db_types import SQLITE
+from mlflow.store.tracking.dbmodels.models import SqlSpan, SqlTraceInfo
 from mlflow.store.tracking.sqlalchemy_store import SqlAlchemyStore
 from mlflow.tracing.constant import (
     AssessmentMetricDimensionKey,
     AssessmentMetricKey,
+    CostKey,
     SpanAttributeKey,
     SpanMetricDimensionKey,
     SpanMetricKey,
@@ -414,6 +420,90 @@ def test_query_trace_metrics_latency_percentiles(
         "dimensions": {TraceMetricDimensionKey.TRACE_NAME: "workflow_b"},
         "values": {f"P{percentile_value}": expected_workflow_b},
     }
+
+
+def test_query_trace_metrics_percentile_skips_sql_rollups_outside_postgres(
+    monkeypatch, store: SqlAlchemyStore
+):
+    monkeypatch.setenv(MLFLOW_SQL_TRACE_ROLLUPS_ENABLED.name, "true")
+    monkeypatch.setattr(store, "db_type", SQLITE)
+
+    with (
+        mock.patch.object(store, "_get_sql_rollup_model_and_dimensions") as get_rollup_model,
+        mock.patch.object(store, "_query_trace_metrics_raw", return_value=[]) as query_raw,
+    ):
+        result = store.query_trace_metrics(
+            experiment_ids=["0"],
+            view_type=MetricViewType.TRACES,
+            metric_name=TraceMetricKey.LATENCY,
+            aggregations=[
+                MetricAggregation(
+                    aggregation_type=AggregationType.PERCENTILE,
+                    percentile_value=50,
+                )
+            ],
+            time_interval_seconds=24 * 60 * 60,
+            start_time_ms=int(datetime(2020, 1, 1, tzinfo=timezone.utc).timestamp() * 1000),
+            end_time_ms=int(datetime(2020, 1, 2, tzinfo=timezone.utc).timestamp() * 1000) - 1,
+        )
+
+    get_rollup_model.assert_not_called()
+    query_raw.assert_called_once()
+    assert result == []
+
+
+def test_query_assessment_distribution_skips_sql_rollups(monkeypatch, store: SqlAlchemyStore):
+    monkeypatch.setenv(MLFLOW_SQL_TRACE_ROLLUPS_ENABLED.name, "true")
+
+    with mock.patch.object(store, "_query_trace_metrics_raw", return_value=[]) as query_raw:
+        result = store.query_trace_metrics(
+            experiment_ids=["0"],
+            view_type=MetricViewType.ASSESSMENTS,
+            metric_name=AssessmentMetricKey.ASSESSMENT_COUNT,
+            aggregations=[MetricAggregation(aggregation_type=AggregationType.COUNT)],
+            dimensions=[
+                AssessmentMetricDimensionKey.ASSESSMENT_NAME,
+                AssessmentMetricDimensionKey.ASSESSMENT_VALUE,
+            ],
+            start_time_ms=int(datetime(2020, 1, 1, tzinfo=timezone.utc).timestamp() * 1000),
+            end_time_ms=int(datetime(2020, 1, 2, tzinfo=timezone.utc).timestamp() * 1000) - 1,
+        )
+
+    query_raw.assert_called_once()
+    assert result == []
+
+
+def test_merge_sql_rollup_data_points_uses_weighted_avg(store: SqlAlchemyStore):
+    aggregations = [
+        MetricAggregation(aggregation_type=AggregationType.AVG),
+        MetricAggregation(aggregation_type=AggregationType.COUNT),
+        MetricAggregation(aggregation_type=AggregationType.SUM),
+    ]
+
+    result = store._merge_sql_rollup_data_points(
+        [
+            MetricDataPoint(
+                metric_name=TraceMetricKey.LATENCY,
+                dimensions={},
+                values={"AVG": 10.0, "COUNT": 1.0, "SUM": 10.0},
+            ),
+            MetricDataPoint(
+                metric_name=TraceMetricKey.LATENCY,
+                dimensions={},
+                values={"AVG": 30.0, "COUNT": 3.0, "SUM": 90.0},
+            ),
+        ],
+        TraceMetricKey.LATENCY,
+        aggregations,
+    )
+
+    assert [asdict(point) for point in result] == [
+        {
+            "metric_name": TraceMetricKey.LATENCY,
+            "dimensions": {},
+            "values": {"AVG": 25.0, "COUNT": 4.0, "SUM": 100.0},
+        }
+    ]
 
 
 def test_query_trace_metrics_latency_percentile_identical_values(store: SqlAlchemyStore):
@@ -1327,6 +1417,85 @@ def test_query_trace_metrics_cache_read_input_tokens_no_dimensions(
     }
 
 
+def test_start_trace_populates_denormalized_trace_cost(store: SqlAlchemyStore):
+    exp_id = store.create_experiment("test_start_trace_populates_trace_cost")
+    trace_info = TraceInfo(
+        trace_id="trace-cost-start",
+        trace_location=trace_location.TraceLocation.from_experiment_id(exp_id),
+        request_time=get_current_time_millis(),
+        execution_duration=100,
+        state=TraceStatus.OK,
+        trace_metadata={
+            TraceMetadataKey.COST: json.dumps({
+                CostKey.INPUT_COST: 0.1,
+                CostKey.OUTPUT_COST: 0.2,
+                CostKey.TOTAL_COST: 0.3,
+            })
+        },
+    )
+
+    store.start_trace(trace_info)
+
+    with store.ManagedSessionMaker() as session:
+        cost = (
+            session
+            .query(
+                SqlTraceInfo.input_cost,
+                SqlTraceInfo.output_cost,
+                SqlTraceInfo.total_cost,
+            )
+            .filter(SqlTraceInfo.request_id == "trace-cost-start")
+            .one()
+        )
+    assert tuple(cost) == (0.1, 0.2, 0.3)
+
+
+def test_log_spans_populates_denormalized_trace_cost(store: SqlAlchemyStore):
+    exp_id = store.create_experiment("test_log_spans_populates_trace_cost")
+    trace_id = "trace-cost-spans"
+    spans = [
+        create_test_span(
+            trace_id,
+            "span1",
+            span_id=1,
+            attributes={
+                SpanAttributeKey.LLM_COST: {
+                    CostKey.INPUT_COST: 0.1,
+                    CostKey.OUTPUT_COST: 0.2,
+                    CostKey.TOTAL_COST: 0.3,
+                }
+            },
+        ),
+        create_test_span(
+            trace_id,
+            "span2",
+            span_id=2,
+            attributes={
+                SpanAttributeKey.LLM_COST: {
+                    CostKey.INPUT_COST: 0.4,
+                    CostKey.OUTPUT_COST: 0.5,
+                    CostKey.TOTAL_COST: 0.9,
+                }
+            },
+        ),
+    ]
+
+    store.log_spans(exp_id, spans)
+
+    with store.ManagedSessionMaker() as session:
+        cost = (
+            session
+            .query(
+                SqlTraceInfo.input_cost,
+                SqlTraceInfo.output_cost,
+                SqlTraceInfo.total_cost,
+            )
+            .filter(SqlTraceInfo.request_id == trace_id)
+            .one()
+        )
+    assert tuple(cost) == pytest.approx((0.5, 0.7, 1.2))
+
+
 def test_query_span_metrics_count_no_dimensions(store: SqlAlchemyStore):
     exp_id = store.create_experiment("test_span_count_no_dimensions")
 
@@ -1577,6 +1746,49 @@ def test_query_span_metrics_with_time_interval(store: SqlAlchemyStore):
         },
         "values": {"COUNT": 1},
     }
+
+
+def test_query_span_metric_samples_scales_time_bounds(store: SqlAlchemyStore):
+    experiment_id = store.create_experiment("test_span_sample_time_bounds")
+    base_time_ms = 1_577_836_800_000
+    store.start_trace(
+        TraceInfo(
+            trace_id="trace1",
+            trace_location=trace_location.TraceLocation.from_experiment_id(experiment_id),
+            request_time=base_time_ms,
+            execution_duration=100,
+            state=TraceStatus.OK,
+        )
+    )
+    store.log_spans(
+        experiment_id,
+        [
+            create_test_span(
+                "trace1",
+                "outside",
+                span_id=1,
+                start_ns=base_time_ms * 1_000_000,
+                end_ns=(base_time_ms + 100) * 1_000_000,
+            ),
+            create_test_span(
+                "trace1",
+                "inside",
+                span_id=2,
+                start_ns=(base_time_ms + 1_000) * 1_000_000,
+                end_ns=(base_time_ms + 1_200) * 1_000_000,
+            ),
+        ],
+    )
+
+    samples = store._query_trace_metric_samples(
+        experiment_ids=[experiment_id],
+        view_type=MetricViewType.SPANS,
+        metric_name=SpanMetricKey.LATENCY,
+        start_time_ms=base_time_ms + 1_000,
+        end_time_ms=base_time_ms + 2_000,
+    )
+
+    assert [(sample.dimensions, sample.value) for sample in samples] == [({}, 200.0)]
 
 
 def test_query_span_metrics_with_time_interval_and_dimensions(store: SqlAlchemyStore):
@@ -2944,19 +3156,7 @@ def test_query_assessment_metrics_with_time_interval(store: SqlAlchemyStore):
     base_time_ms = 1577836800000
     hour_ms = 60 * 60 * 1000
 
-    trace_id = f"tr-{uuid.uuid4().hex}"
-    trace_info = TraceInfo(
-        trace_id=trace_id,
-        trace_location=trace_location.TraceLocation.from_experiment_id(exp_id),
-        request_time=base_time_ms,
-        execution_duration=100,
-        state=TraceStatus.OK,
-        tags={TraceTagKey.TRACE_NAME: "test_trace"},
-    )
-    store.start_trace(trace_info)
-
-    # Create assessments at different times
-    assessment_times = [
+    trace_times = [
         base_time_ms,
         base_time_ms + 10 * 60 * 1000,  # +10 minutes
         base_time_ms + hour_ms,  # +1 hour
@@ -2964,12 +3164,23 @@ def test_query_assessment_metrics_with_time_interval(store: SqlAlchemyStore):
         base_time_ms + 2 * hour_ms,  # +2 hours
     ]
 
-    for i, timestamp in enumerate(assessment_times):
+    for i, trace_timestamp in enumerate(trace_times):
+        trace_id = f"tr-{uuid.uuid4().hex}"
+        store.start_trace(
+            TraceInfo(
+                trace_id=trace_id,
+                trace_location=trace_location.TraceLocation.from_experiment_id(exp_id),
+                request_time=trace_timestamp,
+                execution_duration=100,
+                state=TraceStatus.OK,
+                tags={TraceTagKey.TRACE_NAME: f"test_trace_{i}"},
+            )
+        )
         assessment = Feedback(
             trace_id=trace_id,
             name=f"quality_{i}",
             value=True,
-            create_time_ms=timestamp,
+            create_time_ms=base_time_ms + 3 * hour_ms + i,
             source=AssessmentSource(
                 source_type=AssessmentSourceType.HUMAN, source_id="user@test.com"
             ),
@@ -3021,18 +3232,6 @@ def test_query_assessment_metrics_with_time_interval_and_dimensions(store: SqlAl
     base_time_ms = 1577836800000
     hour_ms = 60 * 60 * 1000
 
-    trace_id = f"tr-{uuid.uuid4().hex}"
-    trace_info = TraceInfo(
-        trace_id=trace_id,
-        trace_location=trace_location.TraceLocation.from_experiment_id(exp_id),
-        request_time=base_time_ms,
-        execution_duration=100,
-        state=TraceStatus.OK,
-        tags={TraceTagKey.TRACE_NAME: "test_trace"},
-    )
-    store.start_trace(trace_info)
-
-    # Create assessments at different times with different names
     assessments_data = [
         (base_time_ms, "correctness"),
         (base_time_ms + 10 * 60 * 1000, "relevance"),
@@ -3040,12 +3239,23 @@ def test_query_assessment_metrics_with_time_interval_and_dimensions(store: SqlAl
         (base_time_ms + hour_ms, "relevance"),
     ]
 
-    for timestamp, name in assessments_data:
+    for i, (trace_timestamp, name) in enumerate(assessments_data):
+        trace_id = f"tr-{uuid.uuid4().hex}"
+        store.start_trace(
+            TraceInfo(
+                trace_id=trace_id,
+                trace_location=trace_location.TraceLocation.from_experiment_id(exp_id),
+                request_time=trace_timestamp,
+                execution_duration=100,
+                state=TraceStatus.OK,
+                tags={TraceTagKey.TRACE_NAME: f"test_trace_{i}"},
+            )
+        )
         assessment = Feedback(
             trace_id=trace_id,
             name=name,
             value=True,
-            create_time_ms=timestamp,
+            create_time_ms=base_time_ms + 2 * hour_ms + i,
             source=AssessmentSource(
                 source_type=AssessmentSourceType.HUMAN, source_id="user@test.com"
             ),
@@ -3617,6 +3827,54 @@ def test_query_assessment_value_mixed_types(store: SqlAlchemyStore):
     }
 
 
+def test_query_assessment_metrics_for_start_trace_assessments(store: SqlAlchemyStore):
+    exp_id = store.create_experiment("test_assessment_metrics_start_trace_assessments")
+
+    trace_id = f"tr-{uuid.uuid4().hex}"
+    trace_info = TraceInfo(
+        trace_id=trace_id,
+        trace_location=trace_location.TraceLocation.from_experiment_id(exp_id),
+        request_time=1577836800000,
+        execution_duration=100,
+        state=TraceStatus.OK,
+        tags={TraceTagKey.TRACE_NAME: "test_trace"},
+        assessments=[
+            Feedback(
+                trace_id=trace_id,
+                name="quality",
+                value=True,
+                source=AssessmentSource(
+                    source_type=AssessmentSourceType.HUMAN, source_id="user@test.com"
+                ),
+            )
+        ],
+    )
+    store.start_trace(trace_info)
+
+    result = store.query_trace_metrics(
+        experiment_ids=[exp_id],
+        view_type=MetricViewType.ASSESSMENTS,
+        metric_name=AssessmentMetricKey.ASSESSMENT_COUNT,
+        aggregations=[MetricAggregation(aggregation_type=AggregationType.COUNT)],
+        dimensions=[
+            AssessmentMetricDimensionKey.ASSESSMENT_NAME,
+            AssessmentMetricDimensionKey.ASSESSMENT_VALUE,
+        ],
+        start_time_ms=1577836800000,
+        end_time_ms=1577840400000,
+    )
+
+    assert len(result) == 1
+    assert asdict(result[0]) == {
+        "metric_name": AssessmentMetricKey.ASSESSMENT_COUNT,
+        "dimensions": {
+            AssessmentMetricDimensionKey.ASSESSMENT_NAME: "quality",
+            AssessmentMetricDimensionKey.ASSESSMENT_VALUE: json.dumps(True),
+        },
+        "values": {"COUNT": 1},
+    }
+
+
 def test_query_assessment_value_multiple_aggregations(store: SqlAlchemyStore):
     exp_id = store.create_experiment("test_assessment_value_multiple_aggs")
 
@@ -3734,18 +3992,7 @@ def test_query_assessment_value_with_time_bucket(store: SqlAlchemyStore):
     base_time_ms = 1577836800000
     hour_ms = 60 * 60 * 1000
 
-    trace_id = f"tr-{uuid.uuid4().hex}"
-    trace_info = TraceInfo(
-        trace_id=trace_id,
-        trace_location=trace_location.TraceLocation.from_experiment_id(exp_id),
-        request_time=base_time_ms,
-        execution_duration=100,
-        state=TraceStatus.OK,
-        tags={TraceTagKey.TRACE_NAME: "test_trace"},
-    )
-    store.start_trace(trace_info)
-
-    # Create assessments with numeric values at different times
+    # Create assessments on traces with request times in different buckets.
     assessment_data = [
         # Hour 0: avg should be (0.8 + 0.9) / 2 = 0.85
         (base_time_ms, "accuracy", 0.8),
@@ -3758,6 +4005,16 @@ def test_query_assessment_value_with_time_bucket(store: SqlAlchemyStore):
     ]
 
     for timestamp, name, value in assessment_data:
+        trace_id = f"tr-{uuid.uuid4().hex}"
+        trace_info = TraceInfo(
+            trace_id=trace_id,
+            trace_location=trace_location.TraceLocation.from_experiment_id(exp_id),
+            request_time=timestamp,
+            execution_duration=100,
+            state=TraceStatus.OK,
+            tags={TraceTagKey.TRACE_NAME: "test_trace"},
+        )
+        store.start_trace(trace_info)
         assessment = Feedback(
             trace_id=trace_id,
             name=name,
@@ -4214,6 +4471,39 @@ def test_query_span_metrics_cost_sum(store: SqlAlchemyStore):
     }
 
 
+def test_query_span_metrics_postgres_uses_direct_sargable_span_query(
+    store: SqlAlchemyStore,
+):
+    query = mock.MagicMock()
+    query.filter.return_value = query
+    query.with_entities.return_value = query
+    query.limit.return_value = query
+    query.all.return_value = [(1,)]
+    session = mock.MagicMock()
+    session.query.return_value = query
+
+    with mock.patch.object(store, "db_type", "postgresql"):
+        store._query_trace_metrics_raw(
+            session=session,
+            experiment_ids=["1"],
+            view_type=MetricViewType.SPANS,
+            metric_name=SpanMetricKey.SPAN_COUNT,
+            aggregations=[MetricAggregation(aggregation_type=AggregationType.COUNT)],
+            start_time_ms=1000,
+            end_time_ms=2000,
+        )
+
+    session.query.assert_called_once_with(SqlSpan)
+    compiled_filters = " ".join(
+        str(clause.compile(compile_kwargs={"literal_binds": True}))
+        for call in query.filter.call_args_list
+        for clause in call.args
+    )
+    assert "spans.start_time_unix_nano >= 1000000000" in compiled_filters
+    assert "spans.start_time_unix_nano <= 2000000000" in compiled_filters
+    assert "start_time_unix_nano /" not in compiled_filters
+
+
 def test_query_span_metrics_cost_by_model_name(store: SqlAlchemyStore):
     exp_id = store.create_experiment("test_span_cost_by_model")
 
@@ -4457,6 +4747,15 @@ def test_query_span_metrics_input_output_cost(store: SqlAlchemyStore):
         ),
     ]
     store.log_spans(exp_id, spans)
+
+    with store.ManagedSessionMaker() as session:
+        rows = (
+            session
+            .query(SqlSpan.input_cost, SqlSpan.output_cost, SqlSpan.total_cost)
+            .order_by(SqlSpan.start_time_unix_nano)
+            .all()
+        )
+    assert rows == [(0.01, 0.03, 0.04), (0.02, 0.04, 0.06)]
 
     input_result = store.query_trace_metrics(
         experiment_ids=[exp_id],

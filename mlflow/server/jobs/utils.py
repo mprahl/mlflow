@@ -809,3 +809,22 @@ def register_periodic_tasks(huey_instance) -> None:
         "Registered trace_archival_scheduler periodic task (polls every 1 minute and "
         "no-ops when trace archival is disabled or unconfigured)"
     )
+
+    @huey_instance.periodic_task(crontab(minute="*/1"))
+    # Prevent concurrent execution if a rollup pass takes longer than 1 minute.
+    @huey_instance.lock_task("sql-trace-rollup-scheduler-lock")
+    def sql_trace_rollup_scheduler():
+        """Runs every minute and delegates rollup cadence to the SQL rollup service."""
+        from mlflow.store.tracking.sql_trace_rollup_service import (
+            run_sql_trace_rollup_scheduler,
+        )
+
+        try:
+            run_sql_trace_rollup_scheduler()
+        except Exception as e:
+            _logger.exception(f"SQL trace rollup scheduler failed: {e!r}")
+
+    _logger.info(
+        "Registered sql_trace_rollup_scheduler periodic task (polls every 1 minute and "
+        "no-ops when SQL trace rollups are disabled)"
+    )

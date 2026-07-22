@@ -92,6 +92,14 @@ class WorkspaceAwareSqlAlchemyStore(WorkspaceAwareMixin, SqlAlchemyStore):
                 SqlExperiment, SqlTraceInfo.experiment_id == SqlExperiment.experiment_id
             ).filter(SqlExperiment.workspace == workspace)
 
+        if model is SqlAssessments:
+            return (
+                query
+                .join(SqlTraceInfo, SqlAssessments.trace_id == SqlTraceInfo.request_id)
+                .join(SqlExperiment, SqlTraceInfo.experiment_id == SqlExperiment.experiment_id)
+                .filter(SqlExperiment.workspace == workspace)
+            )
+
         if model is SqlIssue:
             return query.join(
                 SqlExperiment, SqlIssue.experiment_id == SqlExperiment.experiment_id

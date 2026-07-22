@@ -1493,6 +1493,24 @@ MLFLOW_SERVER_JOB_TRANSIENT_ERROR_RETRY_MAX_DELAY = _EnvironmentVariable(
 #: (default: ``None``)
 MLFLOW_TRACE_ARCHIVAL_CONFIG = _EnvironmentVariable("MLFLOW_TRACE_ARCHIVAL_CONFIG", str, None)
 
+#: Enables periodic construction of immutable daily SQL rollups for historical trace metrics.
+#: (default: ``False``)
+MLFLOW_SQL_TRACE_ROLLUPS_ENABLED = _BooleanEnvironmentVariable(
+    "MLFLOW_SQL_TRACE_ROLLUPS_ENABLED", False
+)
+
+#: Five-field UTC cron schedule for SQL trace rollup passes.
+#: (default: ``0 2 * * *``)
+MLFLOW_TRACE_ROLLUPS_SCHEDULE = _EnvironmentVariable(
+    "MLFLOW_TRACE_ROLLUPS_SCHEDULE", str, "0 2 * * *"
+)
+
+#: Maximum number of SQL trace rollup partitions to build in one scheduler pass.
+#: (default: ``100``)
+MLFLOW_SQL_TRACE_ROLLUPS_MAX_PARTITIONS_PER_PASS = _EnvironmentVariable(
+    "MLFLOW_SQL_TRACE_ROLLUPS_MAX_PARTITIONS_PER_PASS", int, 100
+)
+
 #: Specifies the maximum number of workers for async judge invocation jobs.
 #: (default: ``10``)
 MLFLOW_SERVER_JUDGE_INVOKE_MAX_WORKERS = _EnvironmentVariable(

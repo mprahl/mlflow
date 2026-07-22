@@ -2985,6 +2985,7 @@ def _insert_trace_with_cost(
         timestamp_ms=timestamp_ms,
         execution_time_ms=100,
         status="OK",
+        total_cost=sum(cost for _, cost in span_costs),
     )
     session.add(trace)
     session.flush()
