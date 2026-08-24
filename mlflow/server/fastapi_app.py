@@ -18,8 +18,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from flask import Flask
 from starlette.middleware.wsgi import WSGIResponder, build_environ
+from starlette.routing import Route
 from starlette.types import Receive, Scope, Send
 
+from mlflow.environment_variables import MLFLOW_SERVER_ENABLE_MCP
 from mlflow.exceptions import MlflowException
 from mlflow.gateway.constants import MLFLOW_GATEWAY_DURATION_HEADER, MLFLOW_GATEWAY_OVERHEAD_HEADER
 from mlflow.gateway.providers.utils import provider_call_duration_ms
@@ -209,6 +211,12 @@ def create_fastapi_app(flask_app: Flask = flask_app):
     if "{" in static_prefix or "}" in static_prefix:
         raise MlflowException(f"{STATIC_PREFIX_ENV_VAR} must not contain '{{' or '}}'.")
 
+    mcp_asgi = None
+    if MLFLOW_SERVER_ENABLE_MCP.get():
+        from mlflow.mcp.http_server import create_mcp_http_asgi_app
+
+        mcp_asgi = create_mcp_http_asgi_app()
+
     # Create FastAPI app with metadata
     fastapi_app = FastAPI(
         title="MLflow Tracking Server",
@@ -219,6 +227,7 @@ def create_fastapi_app(flask_app: Flask = flask_app):
         docs_url=None,
         redoc_url=None,
         openapi_url=None,
+        lifespan=mcp_asgi.lifespan if mcp_asgi is not None else None,
     )
 
     # Initialize security middleware BEFORE adding routes
@@ -248,6 +257,15 @@ def create_fastapi_app(flask_app: Flask = flask_app):
     add_mcp_exception_handlers(fastapi_app)
     for route_prefix in get_mcp_server_api_route_prefixes():
         fastapi_app.include_router(mcp_server_router, prefix=route_prefix)
+
+    if mcp_asgi is not None:
+        # Inner FastMCP path is `/` so the public URL is `/mcp`, not `/mcp/mcp`.
+        # Starlette ``Mount("/mcp")`` matches ``/mcp/...`` but not ``POST /mcp``
+        # without a trailing slash, so bind the exact path as well.
+        fastapi_app.router.routes.append(
+            Route("/mcp", endpoint=mcp_asgi, methods=["GET", "POST", "DELETE"])
+        )
+        fastapi_app.mount("/mcp", mcp_asgi)
 
     # Mount the entire Flask application at the root path.
     # Must come AFTER include_router so native FastAPI routes take precedence.

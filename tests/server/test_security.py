@@ -327,6 +327,8 @@ def test_environment_variable_configuration(
         ("/test", False),
         ("/health", False),
         ("/static/index.html", False),
+        ("/mcp", True),
+        ("/mcp/", True),
     ],
 )
 def test_is_api_endpoint(path, expected):

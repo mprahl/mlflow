@@ -5542,6 +5542,9 @@ def _find_fastapi_validator(
     if is_mcp_server_api_path(path):
         return _get_mcp_server_validator(path)
 
+    if unprefixed.startswith("/mcp") or path.startswith("/mcp"):
+        return _get_require_authentication_validator()
+
     return None
 
 

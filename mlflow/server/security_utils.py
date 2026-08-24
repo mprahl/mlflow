@@ -136,6 +136,7 @@ def is_api_endpoint(path: str) -> bool:
             # artifact_router serves these unprefixed even under `--static-prefix`
             "/api/2.0/mlflow-artifacts/artifacts",
             "/ajax-api/2.0/mlflow-artifacts/artifacts",
+            "/mcp",
         ))
         and path not in TEST_ENDPOINTS
     )

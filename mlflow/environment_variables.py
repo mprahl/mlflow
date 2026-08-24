@@ -1536,6 +1536,11 @@ MLFLOW_SERVER_ENABLE_JOB_EXECUTION = _BooleanEnvironmentVariable(
     "MLFLOW_SERVER_ENABLE_JOB_EXECUTION", True
 )
 
+#: Whether to expose genai MCP tools over Streamable HTTP at ``/mcp`` on the
+#: tracking server. Requires the ``mcp`` extra (``fastmcp``) and uvicorn.
+#: (default: ``False``)
+MLFLOW_SERVER_ENABLE_MCP = _BooleanEnvironmentVariable("MLFLOW_SERVER_ENABLE_MCP", False)
+
 #: Specifies whether to run periodic MLflow server jobs from this instance.
 #: In a multi-replica deployment, enable this on only one instance to avoid duplicate scheduling.
 #: (default: ``True``)

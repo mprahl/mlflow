@@ -46,6 +46,25 @@ export MLFLOW_TRACKING_URI=http://127.0.0.1:5000
 That covers local use. When you're ready to use a different backend, store artifacts remotely, or
 expose the server to your team, see [Configure Server](#configure-server) below.
 
+## MCP on the tracking server \{#mcp}
+
+Expose genai MCP tools (experiments, runs, traces, registered scorers) over Streamable HTTP at
+`/mcp` on the same uvicorn process as the tracking server. This is opt-in, uses the in-process
+tracking store, and reuses the server's existing authentication.
+
+```bash
+pip install 'mlflow[mcp]'
+mlflow server --enable-mcp
+```
+
+Or set `MLFLOW_SERVER_ENABLE_MCP=true`. HTTP MCP requires uvicorn (the default server) and is not
+available with `--gunicorn-opts` or `--waitress-opts`. Clients authenticate with the same Basic /
+token credentials as the REST API.
+
+Models, deployments, and other local/exec tools are not served on `/mcp`. Enable those only on a
+local stdio MCP process via `mlflow mcp run` and `MLFLOW_MCP_TOOLS`. See
+[MLflow MCP Server](/genai/mcp).
+
 ## Logging to a Tracking Server \{#logging_to_a_tracking_server}
 
 Once the tracking server is started, connect your local clients by setting the `MLFLOW_TRACKING_URI` environment variable to the

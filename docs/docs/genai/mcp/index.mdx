@@ -40,9 +40,27 @@ To use the MLflow MCP server, install MLflow with the `mcp` extra:
 pip install 'mlflow[mcp]>=3.5.1'
 ```
 
-## Set up
+## Tracking server HTTP (`/mcp`)
 
-Configure the MLflow MCP server in your MCP client by adding the server configuration to your client's settings file:
+To expose genai MCP tools from the tracking server itself, start uvicorn with MCP enabled:
+
+```bash
+mlflow server --enable-mcp
+```
+
+Clients connect to `http://<host>:<port>/mcp` using Streamable HTTP and the same `Authorization`
+header as the REST API. This path calls the tracking store in-process. It does **not** expose
+models, deployments, `evaluate_traces`, or other local/exec tools, even if `MLFLOW_MCP_TOOLS` is
+set on the server.
+
+`--enable-mcp` requires the `mcp` extra and uvicorn. It cannot be combined with `--gunicorn-opts`
+or `--waitress-opts`.
+
+## Set up (local stdio)
+
+Configure a **local** stdio MCP server in your MCP client by adding the server configuration to
+your client's settings file. This is the way to opt into models, deployments, and other CLI-backed
+tools (`MLFLOW_MCP_TOOLS=ml` or `all`) while running next to the IDE.
 
 <Tabs>
   <TabItem label="VS Code" value="vscode">
@@ -259,13 +277,13 @@ For Databricks environments, ensure you have appropriate authentication configur
 
 The `MLFLOW_MCP_TOOLS` environment variable controls which tools are exposed by the MCP server. This is useful for limiting the number of tools available to your AI assistant, which can improve performance and reduce token usage.
 
-**Supported values:**
+**Supported values (stdio `mlflow mcp run` only):**
 
 | Value             | Description                                    | Tools Included                                 |
 | ----------------- | ---------------------------------------------- | ---------------------------------------------- |
 | `genai` (default) | GenAI-focused tools for tracing and evaluation | `traces`, `scorers`, `experiments`, `runs`     |
-| `ml`              | Traditional ML workflow tools                  | `experiments`, `runs`, `models`, `deployments` |
-| `all`             | All available tools                            | All of the above                               |
+| `ml`              | Traditional ML workflow tools (stdio only)     | `experiments`, `runs`, `models`, `deployments` |
+| `all`             | All available stdio tools                      | All of the above                               |
 
 You can also specify a comma-separated list of individual tool categories:
 

@@ -122,6 +122,9 @@ def _fastapi_native_routes():
     for route in mcp_server_router.routes:
         for method in _methods(route):
             yield mcp_prefix + route.path, method
+    # Streamable HTTP MCP is a Mount, so it is not in the router inventory.
+    for method in ("GET", "POST", "DELETE"):
+        yield "/mcp", method
 
 
 def test_no_ungated_fastapi_native_routes():

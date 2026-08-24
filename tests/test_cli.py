@@ -221,6 +221,12 @@ def test_server_gunicorn_options():
     assert "Cannot specify multiple server options" in result.output
 
 
+def test_server_enable_mcp_rejected_with_gunicorn():
+    result = CliRunner().invoke(server, ["--enable-mcp", "--gunicorn-opts", "--timeout 60"])
+    assert result.exit_code != 0
+    assert "MCP HTTP" in result.output
+
+
 def test_server_initializes_backend_store_when_tracking_enabled():
     handlers._tracking_store = None
     handlers._model_registry_store = None

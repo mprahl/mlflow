@@ -25,6 +25,7 @@ from mlflow.environment_variables import (
     MLFLOW_ENABLE_WORKSPACES,
     MLFLOW_EXPERIMENT_ID,
     MLFLOW_EXPERIMENT_NAME,
+    MLFLOW_SERVER_ENABLE_MCP,
     MLFLOW_TRACE_ARCHIVAL_CONFIG,
     MLFLOW_WORKSPACE,
     MLFLOW_WORKSPACE_STORE_URI,
@@ -308,6 +309,7 @@ def _validate_server_args(
     cors_allowed_origins=None,
     x_frame_options=None,
     disable_security_middleware=None,
+    enable_mcp=None,
 ):
     if sys.platform == "win32":
         if gunicorn_opts is not None:
@@ -347,6 +349,14 @@ def _validate_server_args(
             "the default uvicorn server. They cannot be used with --gunicorn-opts or "
             "--waitress-opts. To use security features, run without specifying a server "
             "option (uses uvicorn by default) or explicitly use --uvicorn-opts."
+        )
+
+    mcp_enabled = bool(enable_mcp) or MLFLOW_SERVER_ENABLE_MCP.get()
+    if using_flask_only and mcp_enabled:
+        raise click.UsageError(
+            "MCP HTTP (--enable-mcp / MLFLOW_SERVER_ENABLE_MCP) is only supported with "
+            "the default uvicorn server. It cannot be used with --gunicorn-opts or "
+            "--waitress-opts."
         )
 
 
@@ -532,6 +542,13 @@ def _validate_static_prefix(ctx, param, value):
     ),
 )
 @click.option(
+    "--enable-mcp",
+    is_flag=True,
+    default=False,
+    help="Expose genai MCP tools over Streamable HTTP at /mcp. Requires the "
+    "mlflow[mcp] extra and uvicorn (not --gunicorn-opts / --waitress-opts).",
+)
+@click.option(
     "--enable-workspaces/--disable-workspaces",
     default=False,
     show_default=True,
@@ -565,6 +582,7 @@ def server(
     secrets_cache_ttl,
     secrets_cache_max_size,
     workspace_store_uri,
+    enable_mcp,
     enable_workspaces,
 ):
     """Run the MLflow tracking server (UI + REST API).
@@ -588,7 +606,7 @@ def server(
       Storage   --backend-store-uri, --registry-store-uri, --default-artifact-root, ...
       Network   --host, --port, --workers, --static-prefix
       Security  --allowed-hosts, --cors-allowed-origins, --x-frame-options, ...
-      Advanced  --app-name, --expose-prometheus, --enable-workspaces, ...
+      Advanced  --app-name, --expose-prometheus, --enable-mcp, --enable-workspaces, ...
 
     \b
     Full guide: https://mlflow.org/docs/latest/self-hosting/architecture/tracking-server
@@ -624,6 +642,7 @@ def server(
         cors_allowed_origins=cors_allowed_origins,
         x_frame_options=x_frame_options,
         disable_security_middleware=disable_security_middleware,
+        enable_mcp=enable_mcp,
     )
 
     # click treats any non-empty env var as "set" for flag options, which would interpret
@@ -636,6 +655,17 @@ def server(
     ):
         enable_workspaces = MLFLOW_ENABLE_WORKSPACES.get()
     assert_server_workspace_env_unset()
+
+    if enable_mcp:
+        os.environ[MLFLOW_SERVER_ENABLE_MCP.name] = "true"
+    if MLFLOW_SERVER_ENABLE_MCP.get():
+        try:
+            import fastmcp  # noqa: F401
+        except ImportError as e:
+            raise click.UsageError(
+                "MCP HTTP is enabled but the 'mcp' extra is not installed. "
+                "Install it with: pip install 'mlflow[mcp]'"
+            ) from e
 
     if disable_security_middleware:
         os.environ["MLFLOW_SERVER_DISABLE_SECURITY_MIDDLEWARE"] = "true"
