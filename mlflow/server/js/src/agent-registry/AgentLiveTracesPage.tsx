@@ -19,6 +19,7 @@ import { createTraceLocationForExperiment } from '../shared/web-shared/genai-tra
 import { useSearchMlflowTraces } from '../shared/web-shared/genai-traces-table/hooks/useMlflowTraces';
 import { getAgentTraceTableFilters } from './agentTraceFilters';
 import { useAgentPreviewExperiment } from './useAgentPreviewExperiment';
+import { InvestigationButton } from './AgentInvestigations';
 
 const AgentSnapshotTracesContent = ({
   agentId,
@@ -156,7 +157,9 @@ const AgentLiveTracesContent = ({
       }}
     >
       <TracesV3Toolbar viewState="logs" />
-      <EnvironmentFilter value={environment} onChange={onEnvironmentChange} />
+      <div css={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
+        <EnvironmentFilter value={environment} onChange={onEnvironmentChange} />
+      </div>
       <TracesV3Logs
         experimentIds={[experimentId]}
         timeRange={timeRange}
@@ -181,28 +184,35 @@ export const AgentLiveTracesPage = ({
   onEnvironmentChange: (value: string) => void;
   relatedAgentId?: string | null;
 }) => {
+  const { theme } = useDesignSystemTheme();
   const { data: experimentId, isLoading, error } = useAgentPreviewExperiment();
-  if (isLoading) return <Typography.Text color="secondary">Loading traces…</Typography.Text>;
-  if (error || !experimentId) {
-    return (
-      <Alert
-        componentId="mlflow.agent_registry.traces.preview_data_missing"
-        type="info"
-        closable={false}
-        message="Agent preview traces are unavailable"
-        description="Restart the dev server with --seed-agent-registry to populate the read-only trace preview."
-      />
-    );
-  }
   return (
-    <MonitoringConfigProvider>
-      <AgentLiveTracesContent
-        agentId={agentId}
-        experimentId={experimentId}
-        environment={environment}
-        onEnvironmentChange={onEnvironmentChange}
-        relatedAgentId={relatedAgentId}
-      />
-    </MonitoringConfigProvider>
+    <div css={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: theme.spacing.sm }}>
+      <div css={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
+        <InvestigationButton mode="runtime">Investigate runtime context</InvestigationButton>
+        <InvestigationButton mode="dependencies">Inspect dependency failures</InvestigationButton>
+      </div>
+      {isLoading ? (
+        <Typography.Text color="secondary">Loading traces…</Typography.Text>
+      ) : error || !experimentId ? (
+        <Alert
+          componentId="mlflow.agent_registry.traces.preview_data_missing"
+          type="info"
+          closable={false}
+          message="Agent preview traces are unavailable"
+          description="Restart the dev server with --seed-agent-registry to populate the read-only trace preview."
+        />
+      ) : (
+        <MonitoringConfigProvider>
+          <AgentLiveTracesContent
+            agentId={agentId}
+            experimentId={experimentId}
+            environment={environment}
+            onEnvironmentChange={onEnvironmentChange}
+            relatedAgentId={relatedAgentId}
+          />
+        </MonitoringConfigProvider>
+      )}
+    </div>
   );
 };

@@ -112,7 +112,15 @@ export const EnvironmentTag = ({ environment }: { environment?: Environment }) =
   </Tag>
 );
 
-export const Events = ({ events, compact = false }: { events: AgentEvent[]; compact?: boolean }) => {
+export const Events = ({
+  events,
+  compact = false,
+  renderAction,
+}: {
+  events: AgentEvent[];
+  compact?: boolean;
+  renderAction?: (event: AgentEvent) => ReactNode;
+}) => {
   const { theme } = useDesignSystemTheme();
   return events.length ? (
     <div>
@@ -140,6 +148,7 @@ export const Events = ({ events, compact = false }: { events: AgentEvent[]; comp
                 <Typography.Text bold>{event.title}</Typography.Text>
               )}
               <EnvironmentTag environment={event.environment} />
+              {renderAction?.(event)}
             </div>
             <Typography.Text size="sm" color="secondary">
               {event.detail}

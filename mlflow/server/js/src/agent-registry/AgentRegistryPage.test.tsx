@@ -425,6 +425,23 @@ describe('agent registry preview', () => {
     );
   });
 
+  it.each([
+    ['snapshots?environment=prod&snapshot=8', 'Investigate change', 'Behavior changes'],
+    ['dashboard?environment=prod&dashboardTab=tool-calls', 'Inspect affected requests', 'Dependency failures'],
+    ['assets?environment=prod&assetTab=tools', 'Inspect dependency failures', 'Dependency failures'],
+    ['traces?environment=prod&groupBy=session', 'Investigate runtime context', 'Runtime context'],
+  ])('opens an investigation from %s without replacing agent navigation', async (section, action, title) => {
+    const user = userEvent.setup();
+    renderPage(`/agents/support-agent/${section}`);
+    await user.click(screen.getByRole('button', { name: action }));
+    expect(screen.getByRole('dialog', { name: `${title} - Support agent` })).toHaveTextContent(
+      'Illustrative evidence - read-only preview',
+    );
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('link', { name: 'Agent snapshots' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Sessions' })).not.toBeInTheDocument();
+  });
+
   it('carries a fleet member environment into the agent page', async () => {
     const user = userEvent.setup();
     renderPage('/fleets/customer-experience');

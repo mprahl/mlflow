@@ -9,6 +9,7 @@ import { getAgentTraceMetricFilters, getAgentTraceNavigationFilters } from './ag
 import type { Agent } from './mockData';
 import { useAgentPreviewExperiment } from './useAgentPreviewExperiment';
 import { getAssetChangeEvents } from './assetChanges';
+import { InvestigationButton } from './AgentInvestigations';
 
 const AgentTimeline = ({
   agent,
@@ -44,7 +45,16 @@ const AgentTimeline = ({
 
   return (
     <Panel title="Agent timeline">
-      <Events events={events} />
+      <Events
+        events={events}
+        renderAction={(event) =>
+          event.snapshotId !== undefined ? (
+            <InvestigationButton mode="change" snapshotId={event.snapshotId}>
+              Investigate change
+            </InvestigationButton>
+          ) : null
+        }
+      />
     </Panel>
   );
 };
@@ -111,6 +121,9 @@ export const AgentDashboard = ({
         toolbarAddons={
           <div css={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
             <EnvironmentFilter value={environment} onChange={onEnvironmentChange} />
+            {activeTab === 'tool-calls' && (
+              <InvestigationButton mode="dependencies">Inspect affected requests</InvestigationButton>
+            )}
             <SimpleSelect
               id="mlflow.agent_registry.dashboard.snapshot"
               componentId="mlflow.agent_registry.dashboard.snapshot"

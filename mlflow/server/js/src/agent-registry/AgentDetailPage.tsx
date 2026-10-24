@@ -44,6 +44,7 @@ import { AgentEndpointConnection } from './AgentEndpointConnection';
 import { AgentCardView } from './AgentCardView';
 import { AgentCapabilities } from './AgentCapabilities';
 import { getSnapshotAssetChanges } from './assetChanges';
+import { AgentInvestigationDrawer, InvestigationButton } from './AgentInvestigations';
 
 const assetSections = ['assets', 'prompts', 'tools', 'skills', 'plugins', 'mcp-servers', 'models'];
 
@@ -119,9 +120,14 @@ const SnapshotDetails = ({ snapshot, agent }: { snapshot: AgentSnapshot; agent: 
         <Typography.Title level={3} withoutMargins>
           Viewing snapshot #{snapshot.id}
         </Typography.Title>
-        <Link componentId="mlflow.agent_registry.snapshot.dashboard" to={scopedPath('dashboard')}>
-          View dashboard
-        </Link>
+        <div css={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm }}>
+          <InvestigationButton mode="change" snapshotId={snapshot.id}>
+            Investigate change
+          </InvestigationButton>
+          <Link componentId="mlflow.agent_registry.snapshot.dashboard" to={scopedPath('dashboard')}>
+            View dashboard
+          </Link>
+        </div>
       </div>
       <Panel title="Details">
         <div
@@ -240,13 +246,18 @@ const SnapshotCompare = ({
     <Panel
       title={`Compare snapshot #${baseline.id} with #${candidate.id}`}
       action={
-        <Button
-          componentId="mlflow.agent_registry.snapshot.switch_sides"
-          aria-label="Switch sides"
-          title="Switch sides"
-          icon={<ExpandMoreIcon css={{ transform: 'rotate(90deg)' }} />}
-          onClick={onSwitchSides}
-        />
+        <div css={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm }}>
+          <InvestigationButton mode="change" baselineId={baseline.id} snapshotId={candidate.id}>
+            Investigate behavior
+          </InvestigationButton>
+          <Button
+            componentId="mlflow.agent_registry.snapshot.switch_sides"
+            aria-label="Switch sides"
+            title="Switch sides"
+            icon={<ExpandMoreIcon css={{ transform: 'rotate(90deg)' }} />}
+            onClick={onSwitchSides}
+          />
+        </div>
       }
     >
       <Table scrollable>
@@ -834,6 +845,9 @@ const AgentDetailPage = () => {
                   </Tabs.List>
                 </Tabs.Root>
                 <AgentAssetsTable agent={agent} section={assetTab} />
+                {['tools', 'mcp-servers'].includes(assetTab) && (
+                  <InvestigationButton mode="dependencies">Inspect dependency failures</InvestigationButton>
+                )}
                 {assetTab === 'tools' && (
                   <Panel title="Tools observed in traces">
                     {agent.traces.some((trace) => trace.observedTools?.length) ? (
@@ -867,6 +881,7 @@ const AgentDetailPage = () => {
           </div>
         </ExperimentPageMainContent>
       </div>
+      <AgentInvestigationDrawer agent={agent} environment={environment} />
     </div>
   );
 };
