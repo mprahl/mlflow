@@ -90,6 +90,7 @@ export const ExperimentEvaluationRunsTableControls = ({
   isComparisonMode,
   setIsComparisonMode,
   enableImprovedComparison,
+  readOnly = false,
 }: {
   rowSelection: RowSelectionState;
   setRowSelection: (selection: RowSelectionState) => void;
@@ -111,6 +112,7 @@ export const ExperimentEvaluationRunsTableControls = ({
   isComparisonMode: boolean;
   setIsComparisonMode: (isComparisonMode: boolean) => void;
   enableImprovedComparison?: boolean;
+  readOnly?: boolean;
 }) => {
   const intl = useIntl();
   const { theme } = useDesignSystemTheme();
@@ -310,6 +312,7 @@ export const ExperimentEvaluationRunsTableControls = ({
         )}
 
         <ExperimentEvaluationRunsTableActions
+          readOnly={readOnly}
           rowSelection={rowSelection}
           setRowSelection={setRowSelection}
           refetchRuns={refetchRuns}

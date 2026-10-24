@@ -35,7 +35,7 @@ export interface UseToolCallChartsSectionDataResult {
 export function useToolCallChartsSectionData({
   enabled = true,
 }: { enabled?: boolean } = {}): UseToolCallChartsSectionDataResult {
-  const { experimentIds, startTimeMs, endTimeMs } = useOverviewChartContext();
+  const { experimentIds, startTimeMs, endTimeMs, filters } = useOverviewChartContext();
   // Filter for TOOL type spans
   const toolFilter = useMemo(() => [createSpanFilter(SpanFilterKey.TYPE, SpanType.TOOL)], []);
 
@@ -47,7 +47,7 @@ export function useToolCallChartsSectionData({
     viewType: MetricViewType.SPANS,
     metricName: SpanMetricKey.SPAN_COUNT,
     aggregations: [{ aggregation_type: AggregationType.COUNT }],
-    filters: toolFilter,
+    filters: [...(filters ?? []), ...toolFilter],
     dimensions: [SpanDimensionKey.SPAN_NAME, SpanDimensionKey.SPAN_STATUS],
     enabled,
   });

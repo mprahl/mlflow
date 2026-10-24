@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, type ReactNode } from 'react';
 import invariant from 'invariant';
 import { useNavigate, useParams } from '../../../common/utils/RoutingUtils';
 import Routes from '../../routes';
@@ -50,12 +50,39 @@ import {
 const DEMO_START_TIME_TAG = 'mlflow.demo.start_time_ms';
 const DEMO_END_TIME_TAG = 'mlflow.demo.end_time_ms';
 
-const ExperimentGenAIOverviewPageImpl = () => {
+export type ExperimentGenAIOverviewPageProps = {
+  experimentIdOverride?: string;
+  baseFilters?: string[];
+  baseTracesNavigationFilters?: string[];
+  activeTabOverride?: string;
+  onTabChange?: (tab: string) => void;
+  toolbarAddons?: ReactNode;
+  timelineContent?: ReactNode;
+  tooltipLinkUrlBuilder?: (experimentId: string, timestampMs: number, timeIntervalSeconds: number) => string;
+  hideTooltipLinks?: boolean;
+  hideIssueDetection?: boolean;
+};
+
+const ExperimentGenAIOverviewPageImpl = ({
+  experimentIdOverride,
+  baseFilters,
+  baseTracesNavigationFilters,
+  activeTabOverride,
+  onTabChange,
+  toolbarAddons,
+  timelineContent,
+  tooltipLinkUrlBuilder,
+  hideTooltipLinks,
+  hideIssueDetection = false,
+}: ExperimentGenAIOverviewPageProps) => {
   const intl = useIntl();
-  const { experimentId } = useParams();
+  const { experimentId: routeExperimentId } = useParams();
+  const experimentId = experimentIdOverride ?? routeExperimentId;
   const navigate = useNavigate();
   const { theme } = useDesignSystemTheme();
-  const [activeTab, setActiveTab] = useOverviewTab();
+  const [routeTab, setRouteTab] = useOverviewTab();
+  const activeTab = activeTabOverride ?? routeTab;
+  const setActiveTab = (tab: string) => (onTabChange ? onTabChange(tab) : setRouteTab(tab as OverviewTab));
   const [selectedTimeUnit, setSelectedTimeUnit] = useState<TimeUnit | null>(null);
   const isFileStore = useIsFileStore();
   const sqlWarehouseContext = useSqlWarehouseContextSafe();
@@ -162,6 +189,17 @@ const ExperimentGenAIOverviewPageImpl = () => {
     () => (isUsageTab ? translateToTracesPageFilters(metricFilters) : undefined),
     [isUsageTab, metricFilters],
   );
+  const combinedChartFilters = useMemo(
+    () => (baseFilters?.length || chartFilters?.length ? [...(baseFilters ?? []), ...(chartFilters ?? [])] : undefined),
+    [baseFilters, chartFilters],
+  );
+  const combinedTracesNavigationFilters = useMemo(
+    () =>
+      baseTracesNavigationFilters?.length || tracesNavigationFilters?.length
+        ? [...(baseTracesNavigationFilters ?? []), ...(tracesNavigationFilters ?? [])]
+        : undefined,
+    [baseTracesNavigationFilters, tracesNavigationFilters],
+  );
   const metricsFilterColumnOptions = useMemo<MetricFilterColumnOption[]>(
     () => [
       {
@@ -236,7 +274,19 @@ const ExperimentGenAIOverviewPageImpl = () => {
         valueHasNoPii
         css={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}
       >
-        <Tabs.List>
+        <Tabs.List
+          scrollAreaViewportCss={{ backgroundImage: 'none' }}
+          css={{
+            '& [role="tab"]': {
+              height: theme.general.heightSm,
+              '&[data-state="active"]': {
+                boxShadow: 'none',
+                borderBottom: `${theme.spacing.xs}px solid ${theme.colors.actionPrimaryBackgroundDefault}`,
+                paddingBottom: theme.spacing.xs,
+              },
+            },
+          }}
+        >
           <Tabs.Trigger value={OverviewTab.Usage}>
             <FormattedMessage
               defaultMessage="Usage"
@@ -255,12 +305,14 @@ const ExperimentGenAIOverviewPageImpl = () => {
               description="Label for the tool calls tab in the experiment overview page"
             />
           </Tabs.Trigger>
+          {timelineContent && <Tabs.Trigger value="timeline">Timeline</Tabs.Trigger>}
         </Tabs.List>
 
         {/* Control bar with time range */}
         <div
           css={{
             display: 'flex',
+            flexWrap: 'wrap',
             alignItems: 'center',
             gap: theme.spacing.sm,
           }}
@@ -272,6 +324,7 @@ const ExperimentGenAIOverviewPageImpl = () => {
               columnOptions={metricsFilterColumnOptions}
             />
           )}
+          {toolbarAddons}
 
           {/* Time unit selector for chart grouping */}
           <TimeUnitSelector
@@ -289,7 +342,7 @@ const ExperimentGenAIOverviewPageImpl = () => {
            */}
           <TracesV3DateSelector excludeOptions={['ALL']} componentId="mlflow.experiment.overview" />
 
-          {shouldEnableIssueDetection() && (
+          {!hideIssueDetection && shouldEnableIssueDetection() && (
             <div css={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: theme.spacing.sm }}>
               <DetectIssuesButton
                 componentId="mlflow.experiment.overview.detect-issues-button"
@@ -305,8 +358,10 @@ const ExperimentGenAIOverviewPageImpl = () => {
           endTimeMs={endTimeMs}
           timeIntervalSeconds={timeIntervalSeconds}
           timeBuckets={timeBuckets}
-          filters={chartFilters}
-          tracesNavigationFilters={tracesNavigationFilters}
+          filters={combinedChartFilters}
+          tracesNavigationFilters={combinedTracesNavigationFilters}
+          tooltipLinkUrlBuilder={tooltipLinkUrlBuilder}
+          hideTooltipLinks={hideTooltipLinks}
         >
           <Tabs.Content value={OverviewTab.Usage} css={{ flex: 1, overflowY: 'auto' }}>
             <TabContentContainer>
@@ -316,7 +371,7 @@ const ExperimentGenAIOverviewPageImpl = () => {
               {/* Latency and Errors charts - side by side (latency requires UC) */}
               <ChartGrid>
                 {enableAllCharts && <LazyTraceLatencyChart />}
-                <LazyTraceErrorsChart enableTraceNavigation={enableAllCharts} />
+                <LazyTraceErrorsChart enableTraceNavigation={enableAllCharts && !hideTooltipLinks} />
               </ChartGrid>
 
               {/* Token Usage and Token Stats charts - side by side (requires UC) */}
@@ -340,7 +395,7 @@ const ExperimentGenAIOverviewPageImpl = () => {
           <Tabs.Content value={OverviewTab.Quality} css={{ flex: 1, overflowY: 'auto' }}>
             <TabContentContainer>
               {/* Assessment charts - dynamically rendered based on available assessments */}
-              <AssessmentChartsSection enableTraceNavigation={enableAllCharts} />
+              <AssessmentChartsSection enableTraceNavigation={enableAllCharts && !hideTooltipLinks} />
             </TabContentContainer>
           </Tabs.Content>
 
@@ -374,15 +429,20 @@ const ExperimentGenAIOverviewPageImpl = () => {
             </TabContentContainer>
           </Tabs.Content>
         </OverviewChartProvider>
+        {timelineContent && (
+          <Tabs.Content value="timeline" css={{ flex: 1, overflowY: 'auto' }}>
+            {timelineContent}
+          </Tabs.Content>
+        )}
       </Tabs.Root>
     </div>
   );
 };
 
 // Wrap in MonitoringConfigProvider so refresh button updates are received
-const ExperimentGenAIOverviewPage = () => (
+export const ExperimentGenAIOverviewPage = (props: ExperimentGenAIOverviewPageProps) => (
   <MonitoringConfigProvider>
-    <ExperimentGenAIOverviewPageImpl />
+    <ExperimentGenAIOverviewPageImpl {...props} />
   </MonitoringConfigProvider>
 );
 

@@ -40,6 +40,9 @@ import { DOCS_ROOT, GenAIDocsUrl, MLDocsUrl, Version } from '../constants';
 import { WorkspaceSelector } from '../../workspaces/components/WorkspaceSelector';
 import { MlflowSidebarExperimentItems } from './MlflowSidebarExperimentItems';
 import { MlflowSidebarGatewayItems } from './MlflowSidebarGatewayItems';
+import { isAgentRegistryActive, MlflowSidebarAgentItems } from './MlflowSidebarAgentItems';
+import { MlflowSidebarAgentDetailItems } from './MlflowSidebarAgentDetailItems';
+import { MlflowSidebarFleetDetailItems } from './MlflowSidebarFleetDetailItems';
 import { MlflowSidebarSettingsItems } from './MlflowSidebarSettingsItems';
 import { MlflowSidebarWorkflowSwitch } from './MlflowSidebarWorkflowSwitch';
 
@@ -137,6 +140,11 @@ export function MlflowSidebar({
   // Use the current experimentId if inside an experiment, otherwise use the persisted one
   const activeExperimentId = isInsideExperiment(location) ? experimentId : lastSelectedExperimentIdRef.current;
   const showNestedExperimentItems = Boolean(activeExperimentId) && shouldEnableWorkflowBasedNavigation();
+  const activeAgentId = matchPath('/agents/:agentId/*', location.pathname)?.params.agentId;
+  const showNestedAgentItems = Boolean(activeAgentId) && enableWorkflowBasedNavigation;
+  const activeFleetId = matchPath('/fleets/:fleetId/*', location.pathname)?.params.fleetId;
+  const showNestedFleetItems = Boolean(activeFleetId) && enableWorkflowBasedNavigation;
+  const showNestedRegistryItems = showNestedAgentItems || showNestedFleetItems;
   const showNestedSettingsItems = isSettingsActive(location);
 
   // Manage in the avatar dropdown is platform-admin-only — a fast-path
@@ -153,7 +161,7 @@ export function MlflowSidebar({
 
   const menuItems: MenuItemWithNested[] = useMemo(
     () => [
-      ...(!showNestedExperimentItems
+      ...(!showNestedExperimentItems && !showNestedRegistryItems
         ? [
             {
               key: 'home',
@@ -167,25 +175,55 @@ export function MlflowSidebar({
             },
           ]
         : []),
-      {
-        key: 'experiments',
-        icon: <BeakerIcon />,
-        linkProps: {
-          to: ExperimentTrackingRoutes.experimentsObservatoryRoute,
-          isActive: isExperimentsActive,
-          children: <FormattedMessage defaultMessage="Experiments" description="Sidebar link for experiments tab" />,
-        },
-        componentId: 'mlflow.sidebar.experiments_tab_link',
-        nestedItems: showNestedExperimentItems ? (
-          <MlflowSidebarExperimentItems
-            collapsed={!showSidebar}
-            experimentId={activeExperimentId ?? undefined}
-            workflowType={workflowType}
-            onBackClick={clearLastSelectedExperiment}
-          />
-        ) : undefined,
-      },
-      ...(workflowType === WorkflowType.MACHINE_LEARNING || !enableWorkflowBasedNavigation
+      ...(!showNestedRegistryItems
+        ? [
+            {
+              key: 'experiments',
+              icon: <BeakerIcon />,
+              linkProps: {
+                to: ExperimentTrackingRoutes.experimentsObservatoryRoute,
+                isActive: isExperimentsActive,
+                children: (
+                  <FormattedMessage defaultMessage="Experiments" description="Sidebar link for experiments tab" />
+                ),
+              },
+              componentId: 'mlflow.sidebar.experiments_tab_link',
+              nestedItems: showNestedExperimentItems ? (
+                <MlflowSidebarExperimentItems
+                  collapsed={!showSidebar}
+                  experimentId={activeExperimentId ?? undefined}
+                  workflowType={workflowType}
+                  onBackClick={clearLastSelectedExperiment}
+                />
+              ) : undefined,
+            },
+          ]
+        : []),
+      ...(shouldShowGenAIFeatures(enableWorkflowBasedNavigation, workflowType) || showNestedRegistryItems
+        ? [
+            {
+              key: 'agents',
+              icon: <SparkleDoubleIcon />,
+              linkProps: {
+                to: '/agents',
+                isActive: isAgentRegistryActive,
+                children: (
+                  <FormattedMessage defaultMessage="Agents" description="Sidebar link for agent registry preview" />
+                ),
+              },
+              componentId: 'mlflow.sidebar.agents_preview_link',
+              nestedItems:
+                showNestedAgentItems && activeAgentId ? (
+                  <MlflowSidebarAgentDetailItems agentId={activeAgentId} collapsed={!showSidebar} />
+                ) : showNestedFleetItems && activeFleetId ? (
+                  <MlflowSidebarFleetDetailItems fleetId={activeFleetId} collapsed={!showSidebar} />
+                ) : isAgentRegistryActive(location) ? (
+                  <MlflowSidebarAgentItems collapsed={!showSidebar} />
+                ) : undefined,
+            },
+          ]
+        : []),
+      ...((workflowType === WorkflowType.MACHINE_LEARNING || !enableWorkflowBasedNavigation) && !showNestedRegistryItems
         ? [
             {
               key: 'models',
@@ -201,7 +239,9 @@ export function MlflowSidebar({
             },
           ]
         : []),
-      ...(shouldShowGenAIFeatures(enableWorkflowBasedNavigation, workflowType) && !showNestedExperimentItems
+      ...(shouldShowGenAIFeatures(enableWorkflowBasedNavigation, workflowType) &&
+      !showNestedExperimentItems &&
+      !showNestedRegistryItems
         ? [
             {
               key: 'ai-registry',
@@ -224,7 +264,9 @@ export function MlflowSidebar({
             },
           ]
         : []),
-      ...(shouldShowGenAIFeatures(enableWorkflowBasedNavigation, workflowType) && gatewayEnabled
+      ...(shouldShowGenAIFeatures(enableWorkflowBasedNavigation, workflowType) &&
+      gatewayEnabled &&
+      !isAgentRegistryActive(location)
         ? [
             {
               key: 'gateway',
@@ -250,6 +292,11 @@ export function MlflowSidebar({
     ],
     [
       showNestedExperimentItems,
+      showNestedAgentItems,
+      showNestedFleetItems,
+      showNestedRegistryItems,
+      activeFleetId,
+      activeAgentId,
       activeExperimentId,
       workflowType,
       clearLastSelectedExperiment,
@@ -327,7 +374,7 @@ export function MlflowSidebar({
           <FormattedMessage defaultMessage="Home" description="Sidebar link for home page" />
         </MlflowSidebarLink>
       )}
-      {enableWorkflowBasedNavigation && showWorkspaceMenuItems && showSidebar && (
+      {enableWorkflowBasedNavigation && showWorkspaceMenuItems && showSidebar && !isAgentRegistryActive(location) && (
         <MlflowSidebarWorkflowSwitch workflowType={workflowType} setWorkflowType={setWorkflowType} />
       )}
 

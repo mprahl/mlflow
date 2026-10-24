@@ -8,18 +8,42 @@ import type { SearchRunsApiResponse } from '../../../types';
  * `useQueries` with an empty list creates no query observer or cache entry, so while this is off
  * the query cache is the same as without it.
  */
-export const useEvalRunsUnfilteredCount = ({ experimentId, enabled }: { experimentId: string; enabled: boolean }) => {
+export const useEvalRunsUnfilteredCount = ({
+  experimentId,
+  enabled,
+  baseFilter = '',
+  fetchAllPages = false,
+}: {
+  experimentId: string;
+  enabled: boolean;
+  baseFilter?: string;
+  fetchAllPages?: boolean;
+}) => {
   const [result] = useQueries({
     queries: (enabled ? [experimentId] : []).map((id) => ({
-      queryKey: ['EVAL_RUNS_UNFILTERED_COUNT', id],
-      queryFn: (): Promise<SearchRunsApiResponse> =>
-        MlflowService.searchRuns({
+      queryKey: [
+        'EVAL_RUNS_UNFILTERED_COUNT',
+        id,
+        ...(baseFilter ? [baseFilter] : []),
+        ...(fetchAllPages ? [true] : []),
+      ],
+      queryFn: async (): Promise<SearchRunsApiResponse> => {
+        const request = {
           experiment_ids: [id],
           order_by: ['attributes.start_time DESC'],
           run_view_type: 'ACTIVE_ONLY',
-          filter: '',
+          filter: baseFilter,
           max_results: 50,
-        }),
+        };
+        let response = await MlflowService.searchRuns(request);
+        if (!fetchAllPages) return response;
+        const runs = [...(response.runs ?? [])];
+        while (response.next_page_token) {
+          response = await MlflowService.searchRuns({ ...request, page_token: response.next_page_token });
+          runs.push(...(response.runs ?? []));
+        }
+        return { ...response, runs, next_page_token: undefined };
+      },
       cacheTime: 0,
       refetchOnWindowFocus: false,
       retry: false,

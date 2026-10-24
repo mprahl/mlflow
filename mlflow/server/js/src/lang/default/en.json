@@ -2083,6 +2083,10 @@
     "defaultMessage": "New",
     "description": "Sidebar > AI Gateway > New feature tag"
   },
+  "5PO8gG": {
+    "defaultMessage": "AI Assistant",
+    "description": "Agent tracing setup AI assistant tab"
+  },
   "5PlfiT": {
     "defaultMessage": "This request exceeds the maximum queries per second limit. Please wait and try again.",
     "description": "Too many requests (HTTP STATUS 429) generic error message"
@@ -4907,6 +4911,10 @@
     "defaultMessage": "Prompt version tag deleted",
     "description": "Webhook event label"
   },
+  "EmydgF": {
+    "defaultMessage": "Has endpoint",
+    "description": "Agent registry endpoint availability filter"
+  },
   "EpFST9": {
     "defaultMessage": "No trace data recorded",
     "description": "Experiment page > traces data drawer > no trace data recorded empty state"
@@ -7294,6 +7302,10 @@
   "Mr3+R5": {
     "defaultMessage": "Expectation (ground truth)",
     "description": "Review question answer type: expectation"
+  },
+  "Ms7JAq": {
+    "defaultMessage": "Agents",
+    "description": "Sidebar agent list link"
   },
   "Mtj9Ay": {
     "defaultMessage": "Edit description",
@@ -11203,6 +11215,10 @@
     "defaultMessage": "Pinned version: v{version}",
     "description": "Pinned Skill version shown in the use-skill modal"
   },
+  "a/eZo2": {
+    "defaultMessage": "CLI",
+    "description": "Agent tracing setup CLI tab"
+  },
   "a02Pn6": {
     "defaultMessage": "Step",
     "description": "Run page > Charts tab > Chart tooltip > Step label"
@@ -11583,6 +11599,10 @@
     "defaultMessage": "An unknown error occurred.",
     "description": "Generic message for an unknown error"
   },
+  "bMLfkR": {
+    "defaultMessage": "Agents",
+    "description": "Sidebar link for agent registry preview"
+  },
   "bMUODD": {
     "defaultMessage": "Cancel detection",
     "description": "Experiment issues tab > Action to cancel the issue detection in progress"
@@ -11918,6 +11938,10 @@
   "cOVXpA": {
     "defaultMessage": "No version is active, so this resolves to version {version}. Make a version active to recommend it.",
     "description": "Tooltip for a registry entity whose latest version is not active"
+  },
+  "cQ1nm5": {
+    "defaultMessage": "Set up manually instead",
+    "description": "Agent tracing manual setup action"
   },
   "cQQnzX": {
     "defaultMessage": "Hide assessments",
@@ -12910,6 +12934,10 @@
   "fkBmdC": {
     "defaultMessage": "New queue",
     "description": "Review queue: create-queue button"
+  },
+  "fky+At": {
+    "defaultMessage": "Agents",
+    "description": "Agent registry list page title"
   },
   "flJNTA": {
     "defaultMessage": "You need to provide values for all defined inputs",
@@ -15315,6 +15343,10 @@
     "defaultMessage": "A view named \"{name}\" already exists. Choose a different name.",
     "description": "Error toast shown when saving a traces view whose name is already taken"
   },
+  "n5aaf6": {
+    "defaultMessage": "Create agent",
+    "description": "Create agent preview action"
+  },
   "n6SrIn": {
     "defaultMessage": "Edit history",
     "description": "Title of a modal that shows the edit history of an assessment"
@@ -15498,6 +15530,10 @@
   "nfu62H": {
     "defaultMessage": "Running",
     "description": "Run status filter value"
+  },
+  "nfup2S": {
+    "defaultMessage": "Set up tracing",
+    "description": "Agent tracing manual setup title"
   },
   "ng29fW": {
     "defaultMessage": "Change",
@@ -16102,6 +16138,10 @@
   "plw4Kp": {
     "defaultMessage": "Stop evaluating",
     "description": "Experiment page > artifact compare view > run column header > \"Evaluate all\" button label when the column is being evaluated"
+  },
+  "pm1/Uw": {
+    "defaultMessage": "Fleets",
+    "description": "Sidebar fleets link"
   },
   "pm1RNL": {
     "defaultMessage": "Pass",
@@ -17850,6 +17890,10 @@
   "vz0hOh": {
     "defaultMessage": "Last year",
     "description": "Date range preset in the evaluation runs filters"
+  },
+  "w+3dFT": {
+    "defaultMessage": "Agents",
+    "description": "Sidebar agent group heading"
   },
   "w+Josc": {
     "defaultMessage": "Enter an expectation name",

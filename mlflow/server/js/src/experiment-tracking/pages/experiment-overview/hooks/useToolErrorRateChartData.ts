@@ -49,7 +49,8 @@ export function useToolErrorRateChartData({
   toolName,
   enabled = true,
 }: UseToolErrorRateChartDataProps & { enabled?: boolean }): UseToolErrorRateChartDataResult {
-  const { experimentIds, startTimeMs, endTimeMs, timeIntervalSeconds, timeBuckets } = useOverviewChartContext();
+  const { experimentIds, startTimeMs, endTimeMs, timeIntervalSeconds, timeBuckets, filters } =
+    useOverviewChartContext();
 
   // Filter for TOOL type spans (no per-tool filter — all tools share one cached query)
   const toolFilters = useMemo(() => [createSpanFilter(SpanFilterKey.TYPE, SpanType.TOOL)], []);
@@ -62,7 +63,7 @@ export function useToolErrorRateChartData({
     viewType: MetricViewType.SPANS,
     metricName: SpanMetricKey.SPAN_COUNT,
     aggregations: [{ aggregation_type: AggregationType.COUNT }],
-    filters: toolFilters,
+    filters: [...(filters ?? []), ...toolFilters],
     dimensions: [SpanDimensionKey.SPAN_NAME, SpanDimensionKey.SPAN_STATUS],
     timeIntervalSeconds,
     enabled,

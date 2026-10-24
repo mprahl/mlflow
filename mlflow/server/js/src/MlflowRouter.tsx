@@ -33,6 +33,7 @@ import { getAccountRouteDefs } from './account/route-defs';
 import { getAdminRouteDefs } from './admin/route-defs';
 import { getMCPRegistryRouteDefs } from './mcp-registry/route-defs';
 import { getSkillRegistryRouteDefs } from './skill-registry/route-defs';
+import { getAgentRegistryRouteDefs } from './agent-registry/route-defs';
 import { DEV_USER_SWITCHER_ENABLED } from './admin/DevUserSwitcher';
 import { useInitializeExperimentRunColors } from './experiment-tracking/components/experiment-page/hooks/useExperimentRunColor';
 import { IssueDetectionJobNotifications } from './experiment-tracking/components/experiment-page/components/traces-v3/IssueDetectionJobNotifications';
@@ -246,6 +247,7 @@ export const MlflowRouter = () => {
       ...(gatewayEnabled ? getGatewayRouteDefs() : []),
       ...getMCPRegistryRouteDefs(),
       ...getSkillRegistryRouteDefs(),
+      ...getAgentRegistryRouteDefs(),
       ...getAccountRouteDefs(),
       ...getAdminRouteDefs(),
       ...getCommonRouteDefs(),

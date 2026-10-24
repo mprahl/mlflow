@@ -38,6 +38,7 @@ describe('useToolUsageChartData', () => {
     endTimeMs,
     timeIntervalSeconds,
     timeBuckets,
+    filters: undefined as string[] | undefined,
   };
 
   const server = setupServer();
@@ -74,6 +75,23 @@ describe('useToolUsageChartData', () => {
     jest.clearAllMocks();
     // Default: return empty data points
     setupTraceMetricsHandler([]);
+  });
+
+  it('includes the agent tag when querying tool metrics', async () => {
+    let requestFilters: string[] | undefined;
+    server.use(
+      rest.post(getAjaxUrl('ajax-api/3.0/mlflow/traces/metrics'), async (req, res, ctx) => {
+        requestFilters = (await req.json()).filters;
+        return res(ctx.json({ data_points: [] }));
+      }),
+    );
+
+    const { result } = renderHook(() => useToolUsageChartData(), {
+      wrapper: createWrapper({ filters: ["trace.tag.`mlflow.agent.id` = 'support-agent'"] }),
+    });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(requestFilters).toContain("trace.tag.`mlflow.agent.id` = 'support-agent'");
   });
 
   describe('loading state', () => {

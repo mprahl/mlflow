@@ -16,6 +16,7 @@ import {
   useFilters,
   useTableSort,
   GenAITracesTableProvider,
+  GenAITracesTableToolbar,
   REQUEST_TIME_COLUMN_ID,
   TracesTableColumnType,
   TracesTableColumnGroup,
@@ -47,6 +48,9 @@ jest.mock('@databricks/web-shared/genai-traces-table', () => {
   );
   return {
     ...actual,
+    GenAITracesTableToolbar: jest.fn((props: React.ComponentProps<typeof actual.GenAITracesTableToolbar>) => (
+      <actual.GenAITracesTableToolbar {...props} />
+    )),
     useExperimentVersionsQuery: jest.fn(),
     useGenAiExperimentRunsForComparison: jest.fn(),
     useMlflowTracesTableMetadata: jest.fn(),
@@ -223,6 +227,29 @@ describe('TracesV3Logs', () => {
     await waitForRoutesToBeRendered();
 
     expect(mockExperimentCustomViewProvider).not.toHaveBeenCalled();
+  });
+
+  it('hides trace write actions in read-only embedded views', async () => {
+    jest.mocked(useMlflowTracesTableMetadata).mockReturnValue({
+      assessmentInfos: [],
+      allColumns: [],
+      totalCount: 0,
+      isLoading: false,
+      error: null,
+      isEmpty: false,
+      tableFilterOptions: { source: [] },
+      evaluatedTraces: [],
+      otherEvaluatedTraces: [],
+    });
+    jest.mocked(useSetInitialTimeFilter).mockReturnValue({ isInitialTimeFilterLoading: false });
+    jest.mocked(useSearchMlflowTraces).mockReturnValue({ data: [], isLoading: false, isFetching: false });
+    const editable = renderComponent();
+    await waitForRoutesToBeRendered();
+    expect(jest.mocked(GenAITracesTableToolbar).mock.calls.at(-1)?.[0].traceActions).not.toEqual({});
+    editable.unmount();
+    renderComponent({ disableActions: true });
+    await waitForRoutesToBeRendered();
+    expect(jest.mocked(GenAITracesTableToolbar).mock.calls.at(-1)?.[0].traceActions).toEqual({});
   });
 
   /**
@@ -466,7 +493,7 @@ describe('TracesV3Logs', () => {
   });
 
   describe('Additional filters', () => {
-    it('should combine additional filters with user filters', async () => {
+    it('should apply additional filters to metadata and combine them with user filters for traces', async () => {
       const userFilters = [{ column: 'status', operator: FilterOperator.EQUALS, value: 'success' }];
       const setFiltersMock = jest.fn();
       jest.mocked(useFilters).mockReturnValue([userFilters, setFiltersMock]);
@@ -501,7 +528,7 @@ describe('TracesV3Logs', () => {
       await waitForRoutesToBeRendered();
 
       expect(useMlflowTracesTableMetadata).toHaveBeenCalledWith(
-        expect.not.objectContaining({
+        expect.objectContaining({
           networkFilters: additionalFilters,
         }),
       );

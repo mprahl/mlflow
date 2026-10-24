@@ -25,7 +25,7 @@ import { flexRender, getCoreRowModel, getExpandedRowModel, getSortedRowModel } f
 import type { ExpandedState, Row, RowSelectionState } from '@tanstack/react-table';
 import { ExperimentEvaluationRunsTableRow } from './ExperimentEvaluationRunsTableRow';
 import type { DatasetWithRunType } from '../../components/experiment-page/components/runs/ExperimentViewDatasetDrawer';
-import { useCallback, useMemo, useRef, useState, forwardRef, type CSSProperties } from 'react';
+import { useCallback, useMemo, useRef, useState, forwardRef, type CSSProperties, type ReactNode } from 'react';
 import { KeyedValueCell, SortableHeaderCell } from './ExperimentEvaluationRunsTableCellRenderers';
 import {
   getEvalRunCellValueBasedOnColumn,
@@ -71,6 +71,8 @@ const pinBaselineData = (data: RunEntityOrGroupData[], baselineRun: RunEntity): 
 const EVAL_RUNS_COLUMN_SIZING_STORAGE_VERSION = 2;
 
 export interface ExperimentEvaluationRunsTableProps {
+  renderRunContext?: (run: RunEntity) => ReactNode;
+  readOnly?: boolean;
   data: RunEntityOrGroupData[];
   /** New UI: the experiment's baseline run, pinned to the top of the table. */
   baselineRun?: RunEntity;
@@ -104,6 +106,8 @@ export const ExperimentEvaluationRunsTable = forwardRef<HTMLDivElement, Experime
   (
     {
       data: dataProp,
+      renderRunContext,
+      readOnly,
       baselineRun,
       uniqueColumns,
       selectedColumns,
@@ -268,6 +272,8 @@ export const ExperimentEvaluationRunsTable = forwardRef<HTMLDivElement, Experime
           return true;
         },
         meta: {
+          renderRunContext,
+          readOnly,
           setSelectedRunUuid,
           setSelectedDatasetWithRun,
           setIsDrawerOpen,

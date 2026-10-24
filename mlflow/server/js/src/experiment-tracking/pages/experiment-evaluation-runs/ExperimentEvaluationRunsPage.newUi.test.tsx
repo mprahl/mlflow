@@ -4,6 +4,7 @@ import { setupServer } from '../../../common/utils/setup-msw';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ExperimentEvaluationRunsPage from './ExperimentEvaluationRunsPage';
+import type { ExperimentEvaluationRunsPageProps } from './ExperimentEvaluationRunsPage';
 import { testRoute, TestRouter } from '../../../common/utils/RoutingTestUtils';
 import { TestApolloProvider } from '../../../common/utils/TestApolloProvider';
 import { MockedReduxStoreProvider } from '../../../common/utils/TestUtils';
@@ -55,7 +56,14 @@ describe('ExperimentEvaluationRunsPage new eval runs UI', () => {
   const renderPage = ({
     queryClient = new QueryClient(),
     initialEntry = '/experiments/exp-1/evaluation-runs',
-  }: { queryClient?: QueryClient; initialEntry?: string } = {}) =>
+    route = '/experiments/:experimentId/evaluation-runs',
+    pageProps = {},
+  }: {
+    queryClient?: QueryClient;
+    initialEntry?: string;
+    route?: string;
+    pageProps?: ExperimentEvaluationRunsPageProps;
+  } = {}) =>
     render(
       <TestApolloProvider disableCache>
         <QueryClientProvider client={queryClient}>
@@ -63,7 +71,7 @@ describe('ExperimentEvaluationRunsPage new eval runs UI', () => {
             <IntlProvider locale="en">
               <DesignSystemProvider>
                 <TestRouter
-                  routes={[testRoute(<ExperimentEvaluationRunsPage />, '/experiments/:experimentId/evaluation-runs')]}
+                  routes={[testRoute(<ExperimentEvaluationRunsPage {...pageProps} />, route)]}
                   initialEntries={[initialEntry]}
                 />
               </DesignSystemProvider>
@@ -130,6 +138,26 @@ describe('ExperimentEvaluationRunsPage new eval runs UI', () => {
     );
   });
 
+  test('an embedded agent page scopes both filtered and total-count queries', async () => {
+    jest.mocked(shouldEnableNewEvalRunsUi).mockReturnValue(true);
+    const baseFilter = "tags.`mlflow.agent.id` = 'support-agent'";
+    const filters: string[] = [];
+    server.use(
+      rest.post('ajax-api/2.0/mlflow/runs/search', async (req, res, ctx) => {
+        filters.push((await req.json()).filter);
+        return res(ctx.json({ runs: [createMockRun('run-a', 2, 0.8)], next_page_token: null }));
+      }),
+    );
+    renderPage({
+      initialEntry: '/agents/support-agent/evaluation-runs?evalRunsSearchFilter=run',
+      route: '/agents/:agentId/evaluation-runs',
+      pageProps: { experimentIdOverride: 'exp-1', baseFilter },
+    });
+    await screen.findByTestId('eval-runs-table-cell-checkbox-run-a');
+    await waitFor(() => expect(filters).toContain(baseFilter));
+    expect(filters.every((filter) => filter.includes(baseFilter))).toBe(true);
+  });
+
   test('flag on: shows the recent runs chart above the table', async () => {
     jest.mocked(shouldEnableNewEvalRunsUi).mockReturnValue(true);
     renderPage();
@@ -152,6 +180,41 @@ describe('ExperimentEvaluationRunsPage new eval runs UI', () => {
     expect(within(menu).getByText('Filter chart to selected runs')).toBeInTheDocument();
     expect(within(menu).getByText('Delete runs')).toBeInTheDocument();
     expect(within(menu).getByRole('menuitem', { name: 'Compare' })).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  test('embedded read-only pages show run context and retain comparison without delete', async () => {
+    jest.mocked(shouldEnableNewEvalRunsUi).mockReturnValue(true);
+    renderPage({
+      pageProps: {
+        experimentIdOverride: 'exp-1',
+        baseFilter: "tags.`mlflow.agent.id` = 'support-agent'",
+        readOnly: true,
+        toolbarAddons: <div>Agent filters</div>,
+        renderRunContext: (run) => <span>Snapshot context for {run.info.runUuid}</span>,
+      },
+    });
+    expect(await screen.findByText('Snapshot context for run-a')).toBeInTheDocument();
+    expect(screen.getByText('Agent filters')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('eval-runs-table-cell-checkbox-run-a'));
+    await userEvent.click(screen.getByRole('button', { name: 'Actions (1)' }));
+    const menu = await screen.findByRole('menu');
+    expect(within(menu).queryByRole('menuitem', { name: 'Delete runs' })).not.toBeInTheDocument();
+    expect(within(menu).getByRole('menuitem', { name: 'Compare' })).toBeInTheDocument();
+  });
+
+  test('client-side scope applies to both displayed rows and unfiltered counts', async () => {
+    jest.mocked(shouldEnableNewEvalRunsUi).mockReturnValue(true);
+    renderPage({
+      initialEntry: '/experiments/exp-1/evaluation-runs?evalRunsSearchFilter=run',
+      pageProps: {
+        baseFilter: "tags.`mlflow.agent.id` = 'support-agent'",
+        readOnly: true,
+        runFilter: (run) => run.info.runUuid === 'run-a',
+      },
+    });
+    await screen.findByTestId('eval-runs-table-cell-checkbox-run-a');
+    expect(screen.queryByTestId('eval-runs-table-cell-checkbox-run-b')).not.toBeInTheDocument();
+    expect(await screen.findByText('Showing 1 of 1 runs')).toBeInTheDocument();
   });
 
   test('flag on: Compare with two runs selected opens the comparison view', async () => {

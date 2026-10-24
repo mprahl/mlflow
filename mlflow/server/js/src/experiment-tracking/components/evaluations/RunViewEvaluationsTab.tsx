@@ -101,6 +101,7 @@ const RunViewEvaluationsTabInner = ({
   hideCompareSelector = false,
   runType,
   canUseAssistant,
+  readOnly = false,
 }: {
   experimentId: string;
   runUuid: string;
@@ -112,6 +113,7 @@ const RunViewEvaluationsTabInner = ({
   hideCompareSelector?: boolean;
   runType?: string;
   canUseAssistant?: boolean;
+  readOnly?: boolean;
 }) => {
   const isRegressionTest = runType === MLFLOW_RUN_TYPE_VALUE_TEST;
   const { theme } = useDesignSystemTheme();
@@ -420,7 +422,7 @@ const RunViewEvaluationsTabInner = ({
                 setFilters={setFilters}
                 assessmentInfos={assessmentInfos}
                 countInfo={countInfo}
-                traceActions={traceActions}
+                traceActions={readOnly ? {} : traceActions}
                 tableSort={tableSort}
                 setTableSort={setTableSort}
                 allColumns={displayColumns}
@@ -461,7 +463,7 @@ const RunViewEvaluationsTabInner = ({
                     tableSort={tableSort}
                     currentTraceInfoV3={traceInfos || []}
                     compareToTraceInfoV3={compareToRunData}
-                    onTraceTagsEdit={showEditTagsModalForTrace}
+                    onTraceTagsEdit={readOnly ? undefined : showEditTagsModalForTrace}
                     isTableLoading={isTableLoading}
                     isGroupedBySession={isGroupedBySession}
                     fetchNextPage={fetchNextPage}
@@ -493,6 +495,7 @@ export const RunViewEvaluationsTab = ({
   showCompareSelector = false,
   showRefreshButton = false,
   hideCompareSelector = false,
+  readOnly = false,
 }: {
   experimentId: string;
   experiment?: ExperimentEntity | UseGetRunQueryResponseExperiment;
@@ -504,6 +507,7 @@ export const RunViewEvaluationsTab = ({
   showCompareSelector?: boolean;
   showRefreshButton?: boolean;
   hideCompareSelector?: boolean;
+  readOnly?: boolean;
 }) => {
   const runType = runTags?.[MLFLOW_RUN_TYPE_TAG]?.value;
   // Gate toolbar slots before creating the React element: the Analyze button can render null
@@ -534,7 +538,7 @@ export const RunViewEvaluationsTab = ({
         runDisplayName={runDisplayName}
         data={artifactData}
         runTags={runTags}
-        actions={canUseAssistant ? <RunViewEvaluationAnalyzeButton runUuid={runUuid} /> : undefined}
+        actions={!readOnly && canUseAssistant ? <RunViewEvaluationAnalyzeButton runUuid={runUuid} /> : undefined}
       />
     );
   }
@@ -549,7 +553,8 @@ export const RunViewEvaluationsTab = ({
       showRefreshButton={showRefreshButton}
       hideCompareSelector={hideCompareSelector}
       runType={runType}
-      canUseAssistant={canUseAssistant}
+      canUseAssistant={!readOnly && canUseAssistant}
+      readOnly={readOnly}
     />
   );
 };

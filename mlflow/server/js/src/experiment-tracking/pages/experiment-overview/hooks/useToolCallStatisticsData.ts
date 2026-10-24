@@ -39,7 +39,7 @@ export interface UseToolCallStatisticsDataResult {
 export function useToolCallStatisticsData({
   enabled = true,
 }: { enabled?: boolean } = {}): UseToolCallStatisticsDataResult {
-  const { experimentIds, startTimeMs, endTimeMs } = useOverviewChartContext();
+  const { experimentIds, startTimeMs, endTimeMs, filters } = useOverviewChartContext();
   // Filter for TOOL type spans
   const toolFilter = useMemo(() => [createSpanFilter(SpanFilterKey.TYPE, SpanType.TOOL)], []);
 
@@ -55,7 +55,7 @@ export function useToolCallStatisticsData({
     viewType: MetricViewType.SPANS,
     metricName: SpanMetricKey.SPAN_COUNT,
     aggregations: [{ aggregation_type: AggregationType.COUNT }],
-    filters: toolFilter,
+    filters: [...(filters ?? []), ...toolFilter],
     dimensions: [SpanDimensionKey.SPAN_NAME, SpanDimensionKey.SPAN_STATUS],
     enabled,
   });
@@ -72,7 +72,7 @@ export function useToolCallStatisticsData({
     viewType: MetricViewType.SPANS,
     metricName: SpanMetricKey.LATENCY,
     aggregations: [{ aggregation_type: AggregationType.AVG }],
-    filters: toolFilter,
+    filters: [...(filters ?? []), ...toolFilter],
     enabled,
   });
 

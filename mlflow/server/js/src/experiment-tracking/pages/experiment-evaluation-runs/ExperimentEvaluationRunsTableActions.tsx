@@ -18,6 +18,7 @@ export const ExperimentEvaluationRunsTableActions = ({
   setIsComparisonMode,
   onFilterChartToSelectedRuns,
   isChartFilteredToSelection = false,
+  readOnly = false,
 }: {
   rowSelection: RowSelectionState;
   setRowSelection: (selection: RowSelectionState) => void;
@@ -31,6 +32,7 @@ export const ExperimentEvaluationRunsTableActions = ({
   setIsComparisonMode?: (isComparisonMode: boolean) => void;
   onFilterChartToSelectedRuns?: () => void;
   isChartFilteredToSelection?: boolean;
+  readOnly?: boolean;
 }) => {
   const intl = useIntl();
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
@@ -144,7 +146,8 @@ export const ExperimentEvaluationRunsTableActions = ({
           <DropdownMenu.Item
             componentId="mlflow.eval-runs.actions.delete"
             onClick={() => setDeleteModalVisible(true)}
-            disabled={noRunsSelected}
+            disabled={noRunsSelected || readOnly}
+            css={readOnly ? { display: 'none' } : undefined}
             disabledReason={
               <FormattedMessage
                 defaultMessage="Please select at least 1 run to delete"

@@ -1,0 +1,20 @@
+[
+  {
+    "id": "customer-experience",
+    "name": "Customer experience",
+    "description": "Agents handling customer questions and refund decisions.",
+    "members": [
+      { "agentId": "support-agent", "environment": "prod" },
+      { "agentId": "refund-agent", "environment": "prod" }
+    ]
+  },
+  {
+    "id": "release-readiness",
+    "name": "Release readiness",
+    "description": "Development activity for agents being prepared for release.",
+    "members": [
+      { "agentId": "support-agent", "environment": "staging" },
+      { "agentId": "knowledge-agent", "environment": "dev" }
+    ]
+  }
+]

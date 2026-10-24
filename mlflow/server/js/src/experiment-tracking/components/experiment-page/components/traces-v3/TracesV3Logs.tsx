@@ -262,6 +262,7 @@ const TracesV3LogsImpl = React.memo(
     } = useMlflowTracesTableMetadata({
       locations: traceSearchLocations,
       timeRange,
+      networkFilters: additionalFilters,
       filterByLoggedModelId: loggedModelId,
       disabled: isQueryDisabled,
       scorerDescriptionsByName,
@@ -623,7 +624,7 @@ const TracesV3LogsImpl = React.memo(
                 filters={filters}
                 selectedColumns={effectiveColumns}
                 tableSort={effectiveSort}
-                onTraceTagsEdit={showEditTagsModalForTrace}
+                onTraceTagsEdit={disableActions ? undefined : showEditTagsModalForTrace}
                 isTableLoading={isTableLoading}
                 isGroupedBySession={forceGroupBySession || isGroupedBySession}
                 searchQuery={searchQuery}
@@ -699,7 +700,7 @@ const TracesV3LogsImpl = React.memo(
                   filters={filters}
                   selectedColumns={effectiveColumns}
                   tableSort={effectiveSort}
-                  onTraceTagsEdit={showEditTagsModalForTrace}
+                  onTraceTagsEdit={disableActions ? undefined : showEditTagsModalForTrace}
                   isTableLoading={isTableLoading}
                   isGroupedBySession={forceGroupBySession || isGroupedBySession}
                   searchQuery={searchQuery}
@@ -767,7 +768,7 @@ const TracesV3LogsImpl = React.memo(
               traceInfos={traceInfos}
               tableFilterOptions={tableFilterOptions}
               countInfo={countInfo}
-              traceActions={traceActions}
+              traceActions={disableActions ? {} : traceActions}
               tableSort={toolbarTableSort}
               setTableSort={toolbarSetTableSort}
               allColumns={allColumns}

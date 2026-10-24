@@ -1,5 +1,5 @@
 import invariant from 'invariant';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Global, keyframes } from '@emotion/react';
 import { useExperimentEvaluationRunsData } from '../../components/experiment-page/hooks/useExperimentEvaluationRunsData';
 import { ExperimentEvaluationRunsPageWrapper } from './ExperimentEvaluationRunsPageWrapper';
@@ -104,9 +104,30 @@ const getLearnMoreLink = () => {
   return 'https://mlflow.org/docs/latest/genai/eval-monitor/quickstart/';
 };
 
+export interface ExperimentEvaluationRunsPageProps {
+  experimentIdOverride?: string;
+  baseFilter?: string;
+  scopeKey?: string;
+  runFilter?: (run: RunEntity) => boolean;
+  toolbarAddons?: ReactNode;
+  renderRunContext?: (run: RunEntity) => ReactNode;
+  emptyState?: ReactNode;
+  readOnly?: boolean;
+}
+
 // `baseline` is only passed with the new UI, so the flag-off page mounts no baseline queries.
-const ExperimentEvaluationRunsPageImpl = ({ baseline }: { baseline?: EvalRunsBaselineState }) => {
-  const { experimentId } = useParams();
+const ExperimentEvaluationRunsPageImpl = ({
+  baseline,
+  experimentIdOverride,
+  baseFilter = '',
+  runFilter,
+  toolbarAddons,
+  renderRunContext,
+  emptyState,
+  readOnly = false,
+}: ExperimentEvaluationRunsPageProps & { baseline?: EvalRunsBaselineState }) => {
+  const { experimentId: routeExperimentId } = useParams();
+  const experimentId = experimentIdOverride ?? routeExperimentId;
   const { theme } = useDesignSystemTheme();
   const [tableWidth, setTableWidth] = useState(432);
   const [dragging, setDragging] = useState(false);
@@ -143,6 +164,18 @@ const ExperimentEvaluationRunsPageImpl = ({ baseline }: { baseline?: EvalRunsBas
   const hasInitializedFromUrl = useRef(false);
   useRegisterSelectedIds('selectedRunIds', rowSelection);
 
+  const resetEmbeddedSelection = useCallback(() => {
+    setRowSelection({});
+    setIsComparisonMode(false);
+    setIsViewingSelectedRun(false);
+  }, []);
+  useEffect(() => {
+    if (readOnly) resetEmbeddedSelection();
+  }, [baseFilter, runFilter, readOnly, resetEmbeddedSelection]);
+  useEffect(() => {
+    if (readOnly && !selectedRunUuid && !compareToRunUuid) resetEmbeddedSelection();
+  }, [readOnly, selectedRunUuid, compareToRunUuid, resetEmbeddedSelection]);
+
   const filterButtonRef = useRef<EvalRunsFilterButtonHandle>(null);
   const handleFilterByColumn = useCallback((field: string) => filterButtonRef.current?.openForField(field), []);
 
@@ -163,7 +196,7 @@ const ExperimentEvaluationRunsPageImpl = ({ baseline }: { baseline?: EvalRunsBas
   });
 
   const {
-    data: runs,
+    data: fetchedRuns,
     isLoading,
     isFetching,
     error,
@@ -174,17 +207,28 @@ const ExperimentEvaluationRunsPageImpl = ({ baseline }: { baseline?: EvalRunsBas
   } = useExperimentEvaluationRunsData({
     experimentId,
     enabled: true,
-    filter: filterString,
+    filter: [baseFilter, filterString].filter(Boolean).join(' AND '),
+    fetchAllPages: Boolean(runFilter),
   });
+  const runs = useMemo(() => (runFilter ? fetchedRuns?.filter(runFilter) : fetchedRuns), [fetchedRuns, runFilter]);
 
   // The filtered query cannot report the unfiltered total, so keep a first-page unfiltered query
   // for "showing N of M". Its `hasNextPage` marks the total as a lower bound ("M+").
   const {
-    runs: unfilteredRuns,
+    runs: fetchedUnfilteredRuns,
     hasNextPage: unfilteredHasNextPage,
     isLoading: isLoadingUnfilteredRuns,
     error: unfilteredRunsError,
-  } = useEvalRunsUnfilteredCount({ experimentId, enabled: enableNewEvalRunsUi && isAnyFilterActive });
+  } = useEvalRunsUnfilteredCount({
+    experimentId,
+    enabled: enableNewEvalRunsUi && isAnyFilterActive,
+    baseFilter,
+    fetchAllPages: Boolean(runFilter),
+  });
+  const unfilteredRuns = useMemo(
+    () => (runFilter ? fetchedUnfilteredRuns.filter(runFilter) : fetchedUnfilteredRuns),
+    [fetchedUnfilteredRuns, runFilter],
+  );
 
   const baselineRunUuid = baseline?.baselineRunUuid;
   const fetchedBaselineRun = baseline?.fetchedBaselineRun;
@@ -295,7 +339,7 @@ const ExperimentEvaluationRunsPageImpl = ({ baseline }: { baseline?: EvalRunsBas
       return;
     }
     // Skip syncing if we haven't finished initializing yet
-    if (!isComparisonMode) {
+    if (!isComparisonMode || (readOnly && !selectedRunUuid && !compareToRunUuid)) {
       return;
     }
 
@@ -331,6 +375,7 @@ const ExperimentEvaluationRunsPageImpl = ({ baseline }: { baseline?: EvalRunsBas
     selectedRunUuidsFromCheckbox,
     selectedRunUuid,
     compareToRunUuid,
+    readOnly,
     setSelectedRunUuid,
     setCompareToRunUuid,
     setIsComparisonMode,
@@ -481,6 +526,7 @@ const ExperimentEvaluationRunsPageImpl = ({ baseline }: { baseline?: EvalRunsBas
     const selectedRunTags = keyBy(selectedRun?.data?.tags ?? [], 'key');
     return (
       <RunViewEvaluationsTab
+        readOnly={readOnly}
         experimentId={experimentId}
         runUuid={selectedRunUuid}
         runTags={selectedRunTags}
@@ -532,14 +578,16 @@ const ExperimentEvaluationRunsPageImpl = ({ baseline }: { baseline?: EvalRunsBas
   // When flag is ON, show full-page list view when not in comparison mode and not in charts mode
   const shouldShowFullPageView =
     (enableImprovedComparison || (showIssuesPanelFlag && !isViewingSelectedRun)) &&
+    (!readOnly || !isViewingSelectedRun) &&
     !isComparisonMode &&
     viewMode !== ExperimentEvaluationRunsPageMode.CHARTS;
   // The selection filter only applies to the chart rendered in the full-page list view.
   const isNewEvalRunsChartMounted = enableNewEvalRunsUi && shouldShowFullPageView && !isEmpty && !hasNoFilteredRuns;
 
-  const renderTableControls = () =>
+  const renderBaseTableControls = () =>
     enableNewEvalRunsUi ? (
       <ExperimentEvaluationRunsTableControlsV2
+        readOnly={readOnly}
         experimentId={experimentId}
         runs={flatRuns ?? []}
         refetchRuns={refetchAll}
@@ -582,6 +630,7 @@ const ExperimentEvaluationRunsPageImpl = ({ baseline }: { baseline?: EvalRunsBas
       />
     ) : (
       <ExperimentEvaluationRunsTableControls
+        readOnly={readOnly}
         runs={flatRuns ?? []}
         refetchRuns={refetchAll}
         isFetching={isFetching || isLoading}
@@ -605,8 +654,17 @@ const ExperimentEvaluationRunsPageImpl = ({ baseline }: { baseline?: EvalRunsBas
       />
     );
 
+  const renderTableControls = () => (
+    <>
+      {renderBaseTableControls()}
+      {toolbarAddons}
+    </>
+  );
+
   const renderTable = () => (
     <ExperimentEvaluationRunsTable
+      renderRunContext={renderRunContext}
+      readOnly={readOnly}
       data={runsWithHierarchy}
       {...(enableNewEvalRunsUi ? { baselineRun, onFilterByColumn: handleFilterByColumn } : {})}
       uniqueColumns={uniqueColumns}
@@ -631,7 +689,7 @@ const ExperimentEvaluationRunsPageImpl = ({ baseline }: { baseline?: EvalRunsBas
           { replace: true },
         );
         // When flag is ON, also set isViewingSelectedRun to show the split view
-        if (showIssuesPanelFlag) {
+        if (showIssuesPanelFlag || readOnly) {
           setIsViewingSelectedRun(true);
         }
       }}
@@ -650,75 +708,76 @@ const ExperimentEvaluationRunsPageImpl = ({ baseline }: { baseline?: EvalRunsBas
     />
   );
 
-  const renderEmptyState = () => (
-    <div
-      css={{
-        display: 'flex',
-        flex: 1,
-        flexDirection: 'column',
-        overflow: 'auto',
-        // Always reserve the scrollbar gutter so the horizontally-centered content doesn't
-        // shift left/right when a taller tab adds (or a shorter tab removes) the scrollbar.
-        scrollbarGutter: 'stable',
-      }}
-    >
+  const renderEmptyState = () =>
+    emptyState ?? (
       <div
         css={{
-          // Top-anchored (not vertically centered): the AgentActionCard below changes height
-          // when its active tab switches, and centering would re-center the whole block —
-          // making the title and image above visibly jump. Anchoring to the top keeps them
-          // put and stays scrollable when the content overflows.
-          margin: '0 auto',
           display: 'flex',
+          flex: 1,
           flexDirection: 'column',
-          alignItems: 'center',
-          // Pin to a definite width (the card's own maxWidth) instead of shrink-to-fit. With
-          // `margin: 0 auto` a flex column hugs its widest child, so switching to a wide tab
-          // (e.g. the non-wrapping Python snippet) would widen the whole block and resize the
-          // card. A fixed width keeps it stable; wide tab content scrolls within the card.
-          width: '100%',
-          maxWidth: 720,
-          padding: `${theme.spacing.lg * 2}px ${theme.spacing.md}px ${theme.spacing.lg * 4}px`,
+          overflow: 'auto',
+          // Always reserve the scrollbar gutter so the horizontally-centered content doesn't
+          // shift left/right when a taller tab adds (or a shorter tab removes) the scrollbar.
+          scrollbarGutter: 'stable',
         }}
       >
         <div
-          css={{ maxWidth: 520, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}
+          css={{
+            // Top-anchored (not vertically centered): the AgentActionCard below changes height
+            // when its active tab switches, and centering would re-center the whole block —
+            // making the title and image above visibly jump. Anchoring to the top keeps them
+            // put and stays scrollable when the content overflows.
+            margin: '0 auto',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            // Pin to a definite width (the card's own maxWidth) instead of shrink-to-fit. With
+            // `margin: 0 auto` a flex column hugs its widest child, so switching to a wide tab
+            // (e.g. the non-wrapping Python snippet) would widen the whole block and resize the
+            // card. A fixed width keeps it stable; wide tab content scrolls within the card.
+            width: '100%',
+            maxWidth: 720,
+            padding: `${theme.spacing.lg * 2}px ${theme.spacing.md}px ${theme.spacing.lg * 4}px`,
+          }}
         >
-          <Typography.Title level={3} color="secondary" css={{ marginTop: 0, marginBottom: theme.spacing.xs }}>
-            <FormattedMessage
-              defaultMessage="Evaluate and improve the quality, cost, latency of your GenAI app"
-              description="Title of the empty state for the evaluation runs page"
-            />
-          </Typography.Title>
-          <Typography.Paragraph color="secondary" css={{ marginBottom: theme.spacing.md }}>
-            <FormattedMessage
-              defaultMessage="Create evaluation datasets in order to iteratively evaluate and improve your app. Run evaluations to check that your fixes are working, and compare quality between app / prompt versions. {learnMoreLink}"
-              description="Description of the empty state for the evaluation runs page"
-              values={{
-                learnMoreLink: (
-                  <Typography.Link
-                    componentId="mlflow.eval-runs.empty-state.learn-more-link"
-                    href={getLearnMoreLink()}
-                    css={{ whiteSpace: 'nowrap' }}
-                    openInNewTab
-                  >
-                    <FormattedMessage
-                      defaultMessage="Learn more"
-                      description="Link text to learn more about evaluation runs"
-                    />
-                  </Typography.Link>
-                ),
-              }}
-            />
-          </Typography.Paragraph>
-        </div>
-        <img css={{ maxWidth: '100%', maxHeight: 160 }} src={evalRunsEmptyImg} alt="No runs found" />
-        <div css={{ width: '100%', marginTop: theme.spacing.lg }}>
-          <EvalRunsEmptyStateCard experimentId={experimentId} />
+          <div
+            css={{ maxWidth: 520, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}
+          >
+            <Typography.Title level={3} color="secondary" css={{ marginTop: 0, marginBottom: theme.spacing.xs }}>
+              <FormattedMessage
+                defaultMessage="Evaluate and improve the quality, cost, latency of your GenAI app"
+                description="Title of the empty state for the evaluation runs page"
+              />
+            </Typography.Title>
+            <Typography.Paragraph color="secondary" css={{ marginBottom: theme.spacing.md }}>
+              <FormattedMessage
+                defaultMessage="Create evaluation datasets in order to iteratively evaluate and improve your app. Run evaluations to check that your fixes are working, and compare quality between app / prompt versions. {learnMoreLink}"
+                description="Description of the empty state for the evaluation runs page"
+                values={{
+                  learnMoreLink: (
+                    <Typography.Link
+                      componentId="mlflow.eval-runs.empty-state.learn-more-link"
+                      href={getLearnMoreLink()}
+                      css={{ whiteSpace: 'nowrap' }}
+                      openInNewTab
+                    >
+                      <FormattedMessage
+                        defaultMessage="Learn more"
+                        description="Link text to learn more about evaluation runs"
+                      />
+                    </Typography.Link>
+                  ),
+                }}
+              />
+            </Typography.Paragraph>
+          </div>
+          <img css={{ maxWidth: '100%', maxHeight: 160 }} src={evalRunsEmptyImg} alt="No runs found" />
+          <div css={{ width: '100%', marginTop: theme.spacing.lg }}>
+            <EvalRunsEmptyStateCard experimentId={experimentId} />
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
 
   const renderCountFooter = () =>
     enableNewEvalRunsUi ? (
@@ -980,21 +1039,35 @@ const ExperimentEvaluationRunsPageImpl = ({ baseline }: { baseline?: EvalRunsBas
   );
 };
 
-const ExperimentEvaluationRunsPageWithBaseline = ({ experimentId }: { experimentId: string }) => {
+const ExperimentEvaluationRunsPageWithBaseline = ({
+  experimentId,
+  ...props
+}: ExperimentEvaluationRunsPageProps & { experimentId: string }) => {
   const baseline = useEvalRunsBaselineState(experimentId);
-  return <ExperimentEvaluationRunsPageImpl baseline={baseline} />;
+  return <ExperimentEvaluationRunsPageImpl {...props} experimentIdOverride={experimentId} baseline={baseline} />;
 };
 
-const ExperimentEvaluationRunsPage = () => {
-  const { experimentId } = useParams();
+const ExperimentEvaluationRunsPage = ({
+  experimentIdOverride,
+  baseFilter,
+  scopeKey,
+  ...props
+}: ExperimentEvaluationRunsPageProps = {}) => {
+  const { experimentId: routeExperimentId } = useParams();
+  const experimentId = experimentIdOverride ?? routeExperimentId;
   // The new UI starts each experiment from a fresh page: selection, columns, chart choices and the
   // baseline belong to the experiment they were made in.
   return (
     <ExperimentEvaluationRunsPageWrapper>
-      {shouldEnableNewEvalRunsUi() ? (
-        <ExperimentEvaluationRunsPageWithBaseline key={experimentId} experimentId={experimentId ?? ''} />
+      {shouldEnableNewEvalRunsUi() && !baseFilter && !props.readOnly ? (
+        <ExperimentEvaluationRunsPageWithBaseline {...props} key={experimentId} experimentId={experimentId ?? ''} />
       ) : (
-        <ExperimentEvaluationRunsPageImpl />
+        <ExperimentEvaluationRunsPageImpl
+          {...props}
+          key={scopeKey ? `${experimentId}:${scopeKey}` : baseFilter ? `${experimentId}:${baseFilter}` : undefined}
+          experimentIdOverride={experimentId}
+          baseFilter={baseFilter}
+        />
       )}
     </ExperimentEvaluationRunsPageWrapper>
   );

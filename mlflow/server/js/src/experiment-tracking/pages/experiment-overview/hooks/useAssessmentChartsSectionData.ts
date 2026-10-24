@@ -43,8 +43,18 @@ export interface UseAssessmentChartsSectionDataResult {
 }
 
 export function useAssessmentChartsSectionData(): UseAssessmentChartsSectionDataResult {
-  const { experimentIds, startTimeMs, endTimeMs, timeIntervalSeconds, timeBuckets } = useOverviewChartContext();
-  const filters = useMemo(() => [createAssessmentFilter(AssessmentFilterKey.TYPE, AssessmentTypeValue.FEEDBACK)], []);
+  const {
+    experimentIds,
+    startTimeMs,
+    endTimeMs,
+    timeIntervalSeconds,
+    timeBuckets,
+    filters: chartFilters,
+  } = useOverviewChartContext();
+  const filters = useMemo(
+    () => [...(chartFilters ?? []), createAssessmentFilter(AssessmentFilterKey.TYPE, AssessmentTypeValue.FEEDBACK)],
+    [chartFilters],
+  );
 
   // Single time-series query for all assessments, grouped by assessment name
   const {

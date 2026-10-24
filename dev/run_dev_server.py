@@ -142,6 +142,11 @@ def main() -> None:
             f"Available: {', '.join(dev_stubs.AVAILABLE_STUBS)}."
         ),
     )
+    parser.add_argument(
+        "--seed-agent-registry",
+        action="store_true",
+        help="Seed tagged traces for the agent registry UI preview.",
+    )
     args = parser.parse_args()
     stub_names = [s.strip() for s in args.stub_providers.split(",") if s.strip()]
 
@@ -169,6 +174,16 @@ def main() -> None:
             print(message)
 
     start_backend(backend_port, children, tmp_paths)
+    if args.seed_agent_registry:
+        subprocess.check_call(
+            [
+                sys.executable,
+                REPO_ROOT / "dev" / "seed_agent_registry_mock.py",
+                "--tracking-uri",
+                f"http://localhost:{backend_port}",
+            ],
+            cwd=REPO_ROOT,
+        )
     start_frontend(backend_port, frontend_port, children)
 
     # Block until any child exits; atexit reaps the rest.

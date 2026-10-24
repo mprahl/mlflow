@@ -141,7 +141,7 @@ export const RunNameCell: ColumnDef<RunEntityOrGroupData>['cell'] = ({
   // New UI renders issue-detection run names as a real anchor so browser gestures (Cmd/Ctrl+click,
   // middle-click, "copy link") work.
   const issueDetectionRunLinkTo = (() => {
-    if (!enableNewEvalRunsUi || !isIssueDetectionRun || !showIssuesPanelFlag) {
+    if (evalMeta?.readOnly || !enableNewEvalRunsUi || !isIssueDetectionRun || !showIssuesPanelFlag) {
       return undefined;
     }
     const route = Routes.getIssueDetectionRunDetailsRoute(experimentId, runUuid);
@@ -151,7 +151,10 @@ export const RunNameCell: ColumnDef<RunEntityOrGroupData>['cell'] = ({
 
   // New UI opens other runs in the evaluation run details page, also as a real anchor.
   const evalRunDetailsLinkTo =
-    enableNewEvalRunsUi && !issueDetectionRunLinkTo && !(isIssueDetectionRun && showIssuesPanelFlag)
+    !evalMeta?.readOnly &&
+    enableNewEvalRunsUi &&
+    !issueDetectionRunLinkTo &&
+    !(isIssueDetectionRun && showIssuesPanelFlag)
       ? Routes.getEvaluationRunDetailsRoute(experimentId, runUuid)
       : undefined;
   const runLinkTo = issueDetectionRunLinkTo ?? evalRunDetailsLinkTo;
@@ -159,7 +162,7 @@ export const RunNameCell: ColumnDef<RunEntityOrGroupData>['cell'] = ({
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     // When flag is ON and clicking on an issue detection run, navigate to the issue detection run details page
-    if (isIssueDetectionRun && showIssuesPanelFlag) {
+    if (!evalMeta?.readOnly && isIssueDetectionRun && showIssuesPanelFlag) {
       const route = Routes.getIssueDetectionRunDetailsRoute(experimentId, runUuid);
       const timeRangeSearch = getPreservedQueryString(searchParams.toString());
       navigate(timeRangeSearch ? `${route}${timeRangeSearch}` : route);
@@ -206,126 +209,129 @@ export const RunNameCell: ColumnDef<RunEntityOrGroupData>['cell'] = ({
   );
 
   return (
-    <div
-      css={{
-        overflow: 'hidden',
-        display: 'flex',
-        alignItems: 'center',
-        gap: enableNewEvalRunsUi ? theme.spacing.sm : theme.spacing.xs,
-        paddingLeft: enableNewEvalRunsUi
-          ? // Indent only the run-name column for nested rows so sibling columns stay aligned.
-            level > 0
-            ? theme.spacing.lg * level
-            : undefined
-          : level > 0
-            ? (level + 1) * theme.spacing.lg
-            : undefined,
-      }}
-      onClick={handleClick}
-      onMouseDown={(e) => e.stopPropagation()}
-    >
-      {hasExpander && (
-        <Button
-          componentId="mlflow.eval-runs.parent-child-expand-button"
-          size="small"
-          icon={isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
-          aria-expanded={isExpanded}
-          aria-label={
-            isExpanded
-              ? intl.formatMessage({
-                  defaultMessage: 'Collapse child runs',
-                  description: 'Aria label to collapse child runs',
-                })
-              : intl.formatMessage({
-                  defaultMessage: 'Expand child runs',
-                  description: 'Aria label to expand child runs',
-                })
-          }
-          onClick={handleExpanderClick}
-          type="link"
-        />
-      )}
-      {reserveChevronSlot && (
-        // Empty stand-in matching the expand button's footprint so leaf rows align with expandable
-        // siblings and children sit one level in from their parent.
-        <div aria-hidden css={{ width: theme.spacing.lg, flexShrink: 0 }} />
-      )}
-      {enableNewEvalRunsUi && status ? (
-        <div css={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-          <RunStatusIcon status={status} />
-        </div>
-      ) : null}
-      {isIssueDetectionRun && showIssuesPanelFlag ? (
-        <Tooltip
-          content={
-            <FormattedMessage
-              defaultMessage="Issue detection run"
-              description="Tooltip for the AI icon indicating this is an issue detection run"
-            />
-          }
-          componentId="mlflow.eval-runs.issue-detection-run-icon-tooltip"
-        >
-          <SparkleIcon color="ai" css={{ flexShrink: 0, fontSize: 14, marginLeft: -1, marginRight: -1 }} />
-        </Tooltip>
-      ) : (
-        <RunColorPill
-          color={getRunColor(runUuid)}
-          onChangeColor={(colorValue) => saveRunColor({ runUuid, colorValue })}
-        />
-      )}
-      {enableNewEvalRunsUi ? (
-        <TruncationTooltip componentId="mlflow.eval-runs.run-name-cell.truncation-tooltip">
-          {runNameLink}
-        </TruncationTooltip>
-      ) : (
-        runNameLink
-      )}
-      {enableNewEvalRunsUi && evalMeta?.baselineRunUuid === runUuid ? (
-        <Tag componentId="mlflow.eval-runs.baseline-tag">
-          <Typography.Text size="sm" bold>
-            <FormattedMessage defaultMessage="BASELINE" description="Label for the baseline evaluation run" />
-          </Typography.Text>
-        </Tag>
-      ) : null}
-      {!shouldEnableImprovedEvalRunsComparison() && (
-        <div
-          css={{
-            display: 'none',
-            flexShrink: 0,
-            '.eval-runs-table-row:hover &': { display: 'inline' },
-            svg: {
-              width: theme.typography.fontSizeMd,
-              height: theme.typography.fontSizeMd,
-            },
-          }}
-        >
-          <Link
-            componentId="mlflow.experiment_tracking.evaluation_runs.run_link"
-            target="_blank"
-            rel="noreferrer"
-            to={Routes.getRunPageTabRoute(row.original.info.experimentId, runUuid, RunPageTabName.EVALUATIONS)}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <Tooltip
-              content={
-                <FormattedMessage
-                  defaultMessage="Go to the run"
-                  description="Tooltip for the run name cell in the evaluation runs table, opening the run page in a new tab"
-                />
-              }
-              componentId="mlflow.eval-runs.run-name-cell.tooltip"
-            >
-              <Button
-                type="link"
-                target="_blank"
-                icon={<NewWindowIcon />}
-                size="small"
-                componentId="mlflow.eval-runs.run-name-cell.open-run-page"
+    <div css={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.xs, minWidth: 0 }}>
+      <div
+        css={{
+          overflow: 'hidden',
+          display: 'flex',
+          alignItems: 'center',
+          gap: enableNewEvalRunsUi ? theme.spacing.sm : theme.spacing.xs,
+          paddingLeft: enableNewEvalRunsUi
+            ? // Indent only the run-name column for nested rows so sibling columns stay aligned.
+              level > 0
+              ? theme.spacing.lg * level
+              : undefined
+            : level > 0
+              ? (level + 1) * theme.spacing.lg
+              : undefined,
+        }}
+        onClick={handleClick}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        {hasExpander && (
+          <Button
+            componentId="mlflow.eval-runs.parent-child-expand-button"
+            size="small"
+            icon={isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
+            aria-expanded={isExpanded}
+            aria-label={
+              isExpanded
+                ? intl.formatMessage({
+                    defaultMessage: 'Collapse child runs',
+                    description: 'Aria label to collapse child runs',
+                  })
+                : intl.formatMessage({
+                    defaultMessage: 'Expand child runs',
+                    description: 'Aria label to expand child runs',
+                  })
+            }
+            onClick={handleExpanderClick}
+            type="link"
+          />
+        )}
+        {reserveChevronSlot && (
+          // Empty stand-in matching the expand button's footprint so leaf rows align with expandable
+          // siblings and children sit one level in from their parent.
+          <div aria-hidden css={{ width: theme.spacing.lg, flexShrink: 0 }} />
+        )}
+        {enableNewEvalRunsUi && status ? (
+          <div css={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+            <RunStatusIcon status={status} />
+          </div>
+        ) : null}
+        {isIssueDetectionRun && showIssuesPanelFlag ? (
+          <Tooltip
+            content={
+              <FormattedMessage
+                defaultMessage="Issue detection run"
+                description="Tooltip for the AI icon indicating this is an issue detection run"
               />
-            </Tooltip>
-          </Link>
-        </div>
-      )}
+            }
+            componentId="mlflow.eval-runs.issue-detection-run-icon-tooltip"
+          >
+            <SparkleIcon color="ai" css={{ flexShrink: 0, fontSize: 14, marginLeft: -1, marginRight: -1 }} />
+          </Tooltip>
+        ) : (
+          <RunColorPill
+            color={getRunColor(runUuid)}
+            onChangeColor={evalMeta?.readOnly ? undefined : (colorValue) => saveRunColor({ runUuid, colorValue })}
+          />
+        )}
+        {enableNewEvalRunsUi ? (
+          <TruncationTooltip componentId="mlflow.eval-runs.run-name-cell.truncation-tooltip">
+            {runNameLink}
+          </TruncationTooltip>
+        ) : (
+          runNameLink
+        )}
+        {enableNewEvalRunsUi && evalMeta?.baselineRunUuid === runUuid ? (
+          <Tag componentId="mlflow.eval-runs.baseline-tag">
+            <Typography.Text size="sm" bold>
+              <FormattedMessage defaultMessage="BASELINE" description="Label for the baseline evaluation run" />
+            </Typography.Text>
+          </Tag>
+        ) : null}
+        {!shouldEnableImprovedEvalRunsComparison() && (
+          <div
+            css={{
+              display: 'none',
+              flexShrink: 0,
+              '.eval-runs-table-row:hover &': { display: 'inline' },
+              svg: {
+                width: theme.typography.fontSizeMd,
+                height: theme.typography.fontSizeMd,
+              },
+            }}
+          >
+            <Link
+              componentId="mlflow.experiment_tracking.evaluation_runs.run_link"
+              target="_blank"
+              rel="noreferrer"
+              to={Routes.getRunPageTabRoute(row.original.info.experimentId, runUuid, RunPageTabName.EVALUATIONS)}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Tooltip
+                content={
+                  <FormattedMessage
+                    defaultMessage="Go to the run"
+                    description="Tooltip for the run name cell in the evaluation runs table, opening the run page in a new tab"
+                  />
+                }
+                componentId="mlflow.eval-runs.run-name-cell.tooltip"
+              >
+                <Button
+                  type="link"
+                  target="_blank"
+                  icon={<NewWindowIcon />}
+                  size="small"
+                  componentId="mlflow.eval-runs.run-name-cell.open-run-page"
+                />
+              </Tooltip>
+            </Link>
+          </div>
+        )}
+      </div>
+      {evalMeta?.renderRunContext?.(row.original)}
     </div>
   );
 };

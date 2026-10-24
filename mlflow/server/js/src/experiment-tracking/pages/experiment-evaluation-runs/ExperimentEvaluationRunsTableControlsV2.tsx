@@ -35,6 +35,7 @@ const SEARCH_MIN_WIDTH = 240;
  */
 export const ExperimentEvaluationRunsTableControlsV2 = ({
   experimentId,
+  readOnly = false,
   rowSelection,
   setRowSelection,
   refetchRuns,
@@ -70,6 +71,7 @@ export const ExperimentEvaluationRunsTableControlsV2 = ({
   isChartFilteredToSelection,
 }: {
   experimentId: string;
+  readOnly?: boolean;
   rowSelection: RowSelectionState;
   setRowSelection: (selection: RowSelectionState) => void;
   runs: RunEntity[];
@@ -267,6 +269,7 @@ export const ExperimentEvaluationRunsTableControlsV2 = ({
 
         {hasSelection && (
           <ExperimentEvaluationRunsTableActions
+            readOnly={readOnly}
             rowSelection={rowSelection}
             setRowSelection={setRowSelection}
             refetchRuns={refetchRuns}

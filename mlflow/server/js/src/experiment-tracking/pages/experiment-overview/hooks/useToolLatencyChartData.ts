@@ -39,7 +39,8 @@ export interface UseToolLatencyChartDataResult {
  * @returns Processed chart data, tool names, loading state, and error state
  */
 export function useToolLatencyChartData({ enabled = true }: { enabled?: boolean } = {}): UseToolLatencyChartDataResult {
-  const { experimentIds, startTimeMs, endTimeMs, timeIntervalSeconds, timeBuckets } = useOverviewChartContext();
+  const { experimentIds, startTimeMs, endTimeMs, timeIntervalSeconds, timeBuckets, filters } =
+    useOverviewChartContext();
   // Filter for TOOL type spans
   const toolFilter = useMemo(() => [createSpanFilter(SpanFilterKey.TYPE, SpanType.TOOL)], []);
 
@@ -51,7 +52,7 @@ export function useToolLatencyChartData({ enabled = true }: { enabled?: boolean 
     viewType: MetricViewType.SPANS,
     metricName: SpanMetricKey.LATENCY,
     aggregations: [{ aggregation_type: AggregationType.AVG }],
-    filters: toolFilter,
+    filters: [...(filters ?? []), ...toolFilter],
     dimensions: [SpanDimensionKey.SPAN_NAME],
     timeIntervalSeconds,
     enabled,
