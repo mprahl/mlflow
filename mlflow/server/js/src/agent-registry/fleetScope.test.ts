@@ -17,17 +17,17 @@ describe('fleet membership scope', () => {
       },
     }) as RunEntity;
 
-  it('keeps mixed environment memberships paired with the correct agent', () => {
+  it('includes all environments for member agents only', () => {
     expect(matchesFleetRun(members, run('support-agent', 'staging'))).toBe(true);
     expect(matchesFleetRun(members, run('knowledge-agent', 'dev'))).toBe(true);
-    expect(matchesFleetRun(members, run('support-agent', 'dev'))).toBe(false);
-    expect(matchesFleetRun(members, run('knowledge-agent', 'staging'))).toBe(false);
+    expect(matchesFleetRun(members, run('support-agent', 'dev'))).toBe(true);
+    expect(matchesFleetRun(members, run('knowledge-agent', 'staging'))).toBe(true);
     expect(matchesFleetRun(members, run('refund-agent', 'prod'))).toBe(false);
   });
 
-  it('includes unassigned activity only for an unrestricted membership', () => {
+  it('includes unassigned activity for fleet members', () => {
     expect(matchesFleetRun([{ ...members[0], environment: undefined }], run('support-agent'))).toBe(true);
-    expect(matchesFleetRun(members, run('support-agent'))).toBe(false);
+    expect(matchesFleetRun(members, run('support-agent'))).toBe(true);
   });
 
   it('uses the dev-only fleet scope for shared traces and charts', () => {
@@ -43,12 +43,11 @@ describe('fleet membership scope', () => {
   });
 
   it.each(['dev', 'staging', 'prod', 'unassigned'])(
-    'adds the %s environment without dropping fleet scope',
+    'ignores legacy %s environment without dropping fleet scope',
     (environment) => {
       expect(getFleetMetricFilters(fleet, getSelectedFleetMembers(fleet, 'support-agent'), environment)).toEqual([
         "trace.tag.`mlflow.agent.preview.fleet.release-readiness` = 'true'",
         "trace.tag.`mlflow.agent.id` = 'support-agent'",
-        `trace.tag.\`mlflow.agent.environment\` = '${environment}'`,
       ]);
     },
   );

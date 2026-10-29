@@ -273,7 +273,6 @@ export const AgentEvaluationRunsPage = ({
                   v{runVersion}
                 </Typography.Text>
               )}
-              <Tag componentId="mlflow.agent_registry.evaluations.environment">{runEnvironment}</Tag>
             </div>
           );
         }}
@@ -309,7 +308,6 @@ export const AgentEvaluationRunsTable = ({
         ...(!compact ? ['Status', 'Snapshot', 'Dataset', 'Dataset version'] : []),
         'Quality',
         'Cases',
-        'Environment',
         'Start time',
       ].map((header) => (
         <TableHeader componentId="mlflow.agent_registry.evaluations.header" key={header}>
@@ -338,9 +336,6 @@ export const AgentEvaluationRunsTable = ({
         )}
         <TableCell>{evaluation.quality}%</TableCell>
         <TableCell>{evaluation.cases}</TableCell>
-        <TableCell>
-          <EnvironmentTag environment={evaluation.environment} />
-        </TableCell>
         <TableCell>{formatDate(evaluation.at)}</TableCell>
       </TableRow>
     ))}

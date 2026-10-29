@@ -96,8 +96,6 @@ const AgentRegistryPage = () => {
           <TableRow isHeader>
             <TableHeader componentId="mlflow.agent_registry.table.header">Name</TableHeader>
             <TableHeader componentId="mlflow.agent_registry.table.header">Description</TableHeader>
-            <TableHeader componentId="mlflow.agent_registry.table.header">Owner</TableHeader>
-            <TableHeader componentId="mlflow.agent_registry.table.header">Latest snapshot</TableHeader>
             <TableHeader componentId="mlflow.agent_registry.table.header">Access endpoint</TableHeader>
             <TableHeader componentId="mlflow.agent_registry.table.header">Last activity</TableHeader>
           </TableRow>
@@ -112,16 +110,6 @@ const AgentRegistryPage = () => {
                 <Typography.Text ellipsis title={agent.description}>
                   {agent.description}
                 </Typography.Text>
-              </TableCell>
-              <TableCell css={{ alignItems: 'center' }}>{agent.owner}</TableCell>
-              <TableCell css={{ alignItems: 'center' }}>
-                {agent.snapshots[0] ? (
-                  <Link componentId="mlflow.agent_registry.snapshot.link" to={agentPath(agent.id, 'snapshots')}>
-                    #{agent.snapshots[0].id}
-                  </Link>
-                ) : (
-                  '—'
-                )}
               </TableCell>
               <TableCell css={{ alignItems: 'center' }}>
                 {agent.endpoints.length ? (

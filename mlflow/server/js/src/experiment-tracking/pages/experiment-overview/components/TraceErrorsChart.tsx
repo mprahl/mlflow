@@ -20,6 +20,7 @@ import {
 } from './OverviewChartComponents';
 import { useLegendHighlight, getLineDotStyle } from '../utils/chartUtils';
 import { useOverviewChartContext } from '../OverviewChartContext';
+import { useSnapshotChangeMarkers } from './SnapshotChangeMarkers';
 
 interface TraceErrorsChartProps {
   enableTraceNavigation?: boolean;
@@ -37,6 +38,7 @@ export const TraceErrorsChart: React.FC<TraceErrorsChartProps> = ({ enableTraceN
   // Fetch and process errors chart data
   const { chartData, totalErrors, overallErrorRate, avgErrorRate, isLoading, error, hasData } =
     useTraceErrorsChartData();
+  const snapshotMarkers = useSnapshotChangeMarkers(chartData, 'left');
 
   const tooltipFormatter = useCallback((value: number, name: string) => {
     if (name === 'Error Count') {
@@ -147,6 +149,7 @@ export const TraceErrorsChart: React.FC<TraceErrorsChartProps> = ({ enableTraceN
                 onMouseLeave={handleLegendMouseLeave}
                 {...scrollableLegendProps}
               />
+              {snapshotMarkers}
             </ComposedChart>
           </ResponsiveContainer>
         ) : (

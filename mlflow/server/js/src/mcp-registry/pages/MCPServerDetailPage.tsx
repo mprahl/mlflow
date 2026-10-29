@@ -316,8 +316,24 @@ const MCPServerDetailPage = () => {
       )}
       <MCPServerTagsBox server={server} />
       <Spacer shrinks={false} />
-      <div css={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        <div css={{ flex: '0 0 320px', display: 'flex', flexDirection: 'column' }}>
+      <div
+        css={{
+          flex: 1,
+          display: 'flex',
+          minHeight: 0,
+          overflow: 'hidden',
+          '@media (max-width: 760px)': { flexDirection: 'column' },
+        }}
+      >
+        <div
+          css={{
+            flex: '0 0 320px',
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 0,
+            '@media (max-width: 760px)': { flex: '0 0 240px' },
+          }}
+        >
           <div css={{ display: 'flex', gap: theme.spacing.sm }}>
             <SegmentedControlGroup
               name="mcp-server-detail-view"
@@ -371,8 +387,10 @@ const MCPServerDetailPage = () => {
             display: 'flex',
             flexDirection: 'column',
             minWidth: 0,
+            minHeight: 0,
             borderLeft: `1px solid ${theme.colors.border}`,
             overflow: 'hidden',
+            '@media (max-width: 760px)': { borderLeft: 0, borderTop: `1px solid ${theme.colors.border}` },
           }}
         >
           {viewState.mode === MCPServerDetailViewMode.COMPARE ? (

@@ -35,6 +35,7 @@ import { AddToolsModal } from './AddToolsModal';
 import { useDeleteVersionModal } from '../hooks/useDeleteVersionModal';
 import { useUpdateMCPServerVersion } from '../hooks/useMCPServerVersionMutations';
 import Utils from '../../common/utils/Utils';
+import { AssetUsageTabList, AssetUsedByAgents, AssetUsedByAgentsTab } from '../../agent-registry/AssetUsedByAgents';
 
 const STATUS_OPTIONS = [MCPStatus.DRAFT, MCPStatus.ACTIVE, MCPStatus.DEPRECATED, MCPStatus.DELETED];
 
@@ -58,6 +59,7 @@ export const MCPServerVersionDetail = ({
   const { canUpdate, canDelete } = useServerState(server);
 
   const [addToolsModalVisible, setAddToolsModalVisible] = useState(false);
+  const [activeTab, setActiveTab] = useState('connect');
   const [editingStatusVersion, setEditingStatusVersion] = useState<string>();
   const [pendingStatus, setPendingStatus] = useState<{ version: string; status: MCPStatus }>();
   const updateVersionMutation = useUpdateMCPServerVersion(server.name);
@@ -116,6 +118,7 @@ export const MCPServerVersionDetail = ({
   }
 
   const displayedStatus = pendingStatus?.version === version.version ? pendingStatus.status : version.status;
+  const usageAsset = { kind: 'mcp' as const, name: server.name, version: version.version };
   const statusSelectLabel = intl.formatMessage({
     defaultMessage: 'Version status',
     description: 'Aria label for MCP server version status selector',
@@ -367,17 +370,19 @@ export const MCPServerVersionDetail = ({
         key={version.version}
         componentId="mlflow.mcp_registry.detail.version_tabs"
         valueHasNoPii
-        defaultValue="connect"
+        defaultValue={activeTab === 'agents' ? 'agents' : 'connect'}
+        onValueChange={setActiveTab}
         css={{ marginTop: theme.spacing.md, '& svg': { width: 14, height: 14 } }}
       >
-        <Tabs.List>
+        <AssetUsageTabList>
           <Tabs.Trigger value="connect">
             <FormattedMessage defaultMessage="Connect" description="MCP server version detail connect tab" />
           </Tabs.Trigger>
           <Tabs.Trigger value="tools">
             <FormattedMessage defaultMessage="Tools" description="MCP server version detail tools tab" />
           </Tabs.Trigger>
-        </Tabs.List>
+          <AssetUsedByAgentsTab asset={usageAsset} />
+        </AssetUsageTabList>
 
         <Tabs.Content value="connect" css={{ ...flexColumnGapStyles(theme, theme.spacing.md) }}>
           <AccessEndpointsSubsection
@@ -416,6 +421,9 @@ export const MCPServerVersionDetail = ({
               />
             </Typography.Text>
           )}
+        </Tabs.Content>
+        <Tabs.Content value="agents">
+          <AssetUsedByAgents key={`${server.name}/${version.version}`} asset={usageAsset} />
         </Tabs.Content>
       </Tabs.Root>
 

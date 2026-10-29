@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import {
   Alert,
@@ -118,27 +118,54 @@ const getEvalRegressionCount = (state: GenAIOverviewEvalState) => {
   }).length;
 };
 
-export const ExperimentGenAIJourneyOverviewPage = () => {
+export type GenAIJourneyExtensions = {
+  experimentIdOverride?: string;
+  baseTraceFilters?: string[];
+  baseRunFilter?: string;
+  readOnly?: boolean;
+  headerContent?: ReactNode;
+  footerContent?: ReactNode;
+  tracingSetup?: ReactNode;
+  routes?: { traces: string; evaluations: string; dashboard: string };
+};
+
+export const ExperimentGenAIJourneyOverviewPage = ({
+  experimentIdOverride,
+  baseTraceFilters,
+  baseRunFilter,
+  readOnly = false,
+  headerContent,
+  footerContent,
+  tracingSetup,
+  routes,
+}: GenAIJourneyExtensions = {}) => {
   const { theme } = useDesignSystemTheme();
   const intl = useIntl();
-  const { experimentId = '' } = useParams<{ experimentId: string }>();
+  const { experimentId: routeExperimentId = '' } = useParams<{ experimentId: string }>();
+  const experimentId = experimentIdOverride ?? routeExperimentId;
   const { search } = useLocation();
   const navigate = useNavigate();
-  const isIssueDetectionEnabled = shouldEnableIssueDetection();
+  const isIssueDetectionEnabled = !readOnly && shouldEnableIssueDetection();
   const isExperimentIssuesTabEnabled = shouldEnableExperimentIssuesTab();
   const useRollingSevenDayRange = false;
   const overviewTimeLabel = 'LAST_30_DAYS';
-  const { canUseAssistant, openPanel, prefillPrompt, sendMessageWhenReady } = useAssistant();
+  const { canUseAssistant: assistantAvailable, openPanel, prefillPrompt, sendMessageWhenReady } = useAssistant();
+  const canUseAssistant = assistantAvailable && !readOnly;
   const { state: traceState, retry: retryTraceQuery } = useGenAIOverviewTraceState(
     experimentId,
     useRollingSevenDayRange,
+    baseTraceFilters,
   );
-  const { state: analyzeState, refetch: refetchAnalyzeState } = useGenAIOverviewAnalyzeState(
+  const { state: queriedAnalyzeState, refetch: refetchAnalyzeState } = useGenAIOverviewAnalyzeState(
     experimentId,
     useRollingSevenDayRange,
   );
-  const evalState = useGenAIOverviewEvalState(experimentId);
-  const monitorState = useGenAIOverviewMonitorState(experimentId);
+  const analyzeState = useMemo(
+    () => (baseRunFilter ? { status: 'never-run' as const } : queriedAnalyzeState),
+    [baseRunFilter, queriedAnalyzeState],
+  );
+  const evalState = useGenAIOverviewEvalState(experimentId, baseRunFilter);
+  const monitorState = useGenAIOverviewMonitorState(experimentId, baseTraceFilters);
   const [selectedMonitorScorerName, setSelectedMonitorScorerName] = useState<string>();
   const [promptChartContext, setPromptChartContext] = useState<GenAIOverviewChartContext>();
   const [isIssueDetectionModalOpen, setIsIssueDetectionModalOpen] = useState(false);
@@ -173,22 +200,29 @@ export const ExperimentGenAIJourneyOverviewPage = () => {
     enabled: isTracingOnboardingCandidate,
   });
   const tracesRoute = useMemo(() => {
+    if (routes) return routes.traces;
     const searchParams = new URLSearchParams(search);
     searchParams.set('startTimeLabel', overviewTimeLabel);
     searchParams.delete('startTime');
     searchParams.delete('endTime');
     searchParams.delete('page');
     return `${Routes.getExperimentPageTabRoute(experimentId, ExperimentPageTabName.Traces)}?${searchParams.toString()}`;
-  }, [experimentId, overviewTimeLabel, search]);
+  }, [experimentId, overviewTimeLabel, search, routes]);
   const isResolvingOverviewState =
     traceState.status === 'loading' || (isTracingOnboardingCandidate && isCheckingTraceHistory);
-  const showTracingOnboarding = isTracingOnboardingCandidate && !isCheckingTraceHistory && !containsTraces;
+  const showTracingOnboarding =
+    isTracingOnboardingCandidate &&
+    !isCheckingTraceHistory &&
+    (baseTraceFilters ? traceState.status === 'empty' : !containsTraces);
   const issueDetectionTraces = useDetectionTraceIds(experimentId, isIssueDetectionModalOpen);
-  const scorersRoute = Routes.getExperimentPageTabRoute(experimentId, ExperimentPageTabName.Judges);
-  const qualityDashboardRoute = generatePath(RoutePaths.experimentPageTabDashboard, {
-    experimentId,
-    overviewTab: OverviewTab.Quality,
-  });
+  const scorersRoute =
+    routes?.dashboard ?? Routes.getExperimentPageTabRoute(experimentId, ExperimentPageTabName.Judges);
+  const qualityDashboardRoute =
+    routes?.dashboard ??
+    generatePath(RoutePaths.experimentPageTabDashboard, {
+      experimentId,
+      overviewTab: OverviewTab.Quality,
+    });
 
   const traceCaption = <FormattedMessage defaultMessage="traces" description="Trace step caption" />;
   const issueCaption = <FormattedMessage defaultMessage="issues" description="Analyze step caption" />;
@@ -503,6 +537,8 @@ export const ExperimentGenAIJourneyOverviewPage = () => {
           )}
         </section>
 
+        {headerContent}
+
         <section css={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.md }}>
           {!showTracingOnboarding && (
             <div
@@ -550,7 +586,7 @@ export const ExperimentGenAIJourneyOverviewPage = () => {
                   caption={traceCaption}
                   description={tracingOnboardingDescription}
                   status={traceState}
-                  content={<TracingSetup experimentIds={[experimentId]} />}
+                  content={tracingSetup ?? <TracingSetup experimentIds={[experimentId]} />}
                   expanded
                 />
               </div>
@@ -798,6 +834,11 @@ export const ExperimentGenAIJourneyOverviewPage = () => {
                   evalState.status === 'ready' ? (
                     <GenAIOverviewEvalScoresChart
                       experimentId={experimentId}
+                      runUrlBuilder={
+                        routes
+                          ? (runUuid) => `${routes.evaluations}?${new URLSearchParams({ selectedRunUuid: runUuid })}`
+                          : undefined
+                      }
                       assessmentScoreNames={evalState.assessmentScoreNames}
                       scorePoints={evalState.scorePoints}
                       onAskAssistant={canUseAssistant ? setPromptChartContext : undefined}
@@ -818,7 +859,8 @@ export const ExperimentGenAIJourneyOverviewPage = () => {
                 }
                 artifactHref={
                   evalState.status === 'ready'
-                    ? Routes.getExperimentPageTabRoute(experimentId, ExperimentPageTabName.EvaluationRuns)
+                    ? (routes?.evaluations ??
+                      Routes.getExperimentPageTabRoute(experimentId, ExperimentPageTabName.EvaluationRuns))
                     : undefined
                 }
                 artifactLabel={
@@ -894,7 +936,7 @@ export const ExperimentGenAIJourneyOverviewPage = () => {
                   ) : undefined
                 }
                 action={
-                  monitorState.status !== 'ready' ? (
+                  !readOnly && monitorState.status !== 'ready' ? (
                     <Button
                       componentId="mlflow.genai-overview.add-monitor"
                       type={primaryStage === 'monitor' ? 'primary' : undefined}
@@ -918,6 +960,7 @@ export const ExperimentGenAIJourneyOverviewPage = () => {
           )}
         </section>
       </div>
+      {footerContent}
       {isIssueDetectionModalOpen && issueDetectionTraces.data && (
         <IssueDetectionModal
           experimentId={experimentId}

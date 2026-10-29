@@ -162,6 +162,7 @@ const TracesV3LogsImpl = React.memo(
     additionalFilters,
     disableActions = false,
     customDefaultSelectedColumns,
+    additionalDefaultColumns,
     toolbarAddons,
     toolbarCornerAddons,
     enableSavedViews = false,
@@ -191,6 +192,8 @@ const TracesV3LogsImpl = React.memo(
     additionalFilters?: TableFilter[];
     disableActions?: boolean;
     customDefaultSelectedColumns?: (column: TracesTableColumn) => boolean;
+    /** Columns supplied by embedded views, available and visible by default even without sampled values. */
+    additionalDefaultColumns?: TracesTableColumn[];
     toolbarAddons?: React.ReactNode;
     // Rendered in the toolbar's top-right corner, above the sampled-count badge, for page-level
     // controls (saved views) that should sit apart from the filter/sort/column cluster. Wrapped in
@@ -252,7 +255,7 @@ const TracesV3LogsImpl = React.memo(
     // Get metadata
     const {
       assessmentInfos,
-      allColumns,
+      allColumns: metadataColumns,
       totalCount,
       evaluatedTraces,
       isLoading: isMetadataLoading,
@@ -267,6 +270,15 @@ const TracesV3LogsImpl = React.memo(
       disabled: isQueryDisabled,
       scorerDescriptionsByName,
     });
+    const allColumns = useMemo(
+      () =>
+        additionalDefaultColumns?.length
+          ? Array.from(
+              new Map([...metadataColumns, ...additionalDefaultColumns].map((column) => [column.id, column])).values(),
+            )
+          : metadataColumns,
+      [metadataColumns, additionalDefaultColumns],
+    );
 
     // Setup table states
     const [searchQuery, setSearchQuery] = useState<string>('');
@@ -289,7 +301,10 @@ const TracesV3LogsImpl = React.memo(
         const { responseHasContent, inputHasContent, tokensHasContent } = checkColumnContents(evaluatedTraces);
 
         if (customDefaultSelectedColumns) {
-          return allColumns.filter(customDefaultSelectedColumns);
+          return allColumns.filter(
+            (column) =>
+              customDefaultSelectedColumns(column) || additionalDefaultColumns?.some(({ id }) => id === column.id),
+          );
         }
         const hasSessionIds = evaluatedTraces.some((t) =>
           Boolean(t.traceInfo?.trace_metadata?.[SESSION_ID_METADATA_KEY]),
@@ -297,6 +312,7 @@ const TracesV3LogsImpl = React.memo(
         const hasIssues = evaluatedTraces.some((t) => t.issues && t.issues.length > 0);
         return allColumns.filter(
           (col) =>
+            additionalDefaultColumns?.some(({ id }) => id === col.id) ||
             col.type === TracesTableColumnType.ASSESSMENT ||
             col.type === TracesTableColumnType.EXPECTATION ||
             (inputHasContent && col.type === TracesTableColumnType.INPUT) ||
@@ -312,7 +328,7 @@ const TracesV3LogsImpl = React.memo(
             (hasIssues && col.id === ISSUES_COLUMN_ID),
         );
       },
-      [evaluatedTraces, customDefaultSelectedColumns],
+      [evaluatedTraces, customDefaultSelectedColumns, additionalDefaultColumns],
     );
 
     const { selectedColumns, toggleColumns, setSelectedColumns } = useSelectedColumns(

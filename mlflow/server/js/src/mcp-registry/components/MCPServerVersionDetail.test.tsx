@@ -118,6 +118,15 @@ beforeEach(() => {
 });
 
 describe('Auto-discover tools button', () => {
+  it('shows the Used by agents tab for the selected version', async () => {
+    mockPermissions();
+    renderDetail();
+    await userEvent.click(screen.getByRole('tab', { name: 'Used by agents (0)' }));
+    expect(screen.getByText('No agent snapshots reference this version.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: 'Connect' }));
+    expect(screen.queryByText('No agent snapshots reference this version.')).not.toBeInTheDocument();
+  });
+
   const clickToolsTab = async () => {
     await userEvent.click(screen.getByRole('tab', { name: /tools/i }));
   };

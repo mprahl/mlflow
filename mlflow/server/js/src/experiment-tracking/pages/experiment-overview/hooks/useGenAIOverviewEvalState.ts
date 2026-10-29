@@ -110,18 +110,22 @@ export const resolveGenAIOverviewEvalState = ({
   };
 };
 
-const useEvaluationRunsByType = (experimentId: string, runType: string) => {
+const useEvaluationRunsByType = (experimentId: string, runType: string, baseFilter?: string) => {
   return useExperimentEvaluationRunsData({
     experimentId,
     enabled: Boolean(experimentId),
-    filter: `tags.\`${MLFLOW_RUN_TYPE_TAG}\` = '${runType}'`,
+    filter: [`tags.\`${MLFLOW_RUN_TYPE_TAG}\` = '${runType}'`, baseFilter].filter(Boolean).join(' AND '),
     fetchAllPages: true,
   });
 };
 
-export const useGenAIOverviewEvalState = (experimentId: string): GenAIOverviewEvalState => {
-  const legacyEvaluationRunsQuery = useEvaluationRunsByType(experimentId, MLFLOW_RUN_TYPE_VALUE_EVALUATION);
-  const genAIEvaluationRunsQuery = useEvaluationRunsByType(experimentId, MLFLOW_RUN_TYPE_VALUE_GENAI_EVALUATE);
+export const useGenAIOverviewEvalState = (experimentId: string, baseFilter?: string): GenAIOverviewEvalState => {
+  const legacyEvaluationRunsQuery = useEvaluationRunsByType(experimentId, MLFLOW_RUN_TYPE_VALUE_EVALUATION, baseFilter);
+  const genAIEvaluationRunsQuery = useEvaluationRunsByType(
+    experimentId,
+    MLFLOW_RUN_TYPE_VALUE_GENAI_EVALUATE,
+    baseFilter,
+  );
   const runs = useMemo(
     () =>
       Array.from(

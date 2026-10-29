@@ -57,11 +57,7 @@ export const getFleetMetricFilters = (fleet: Fleet, members: FleetMember[], envi
 
 export const matchesFleetRun = (members: FleetMember[], run: RunEntity) => {
   const tag = (key: string) => run.data.tags?.find((item) => item.key === key)?.value;
-  return members.some(
-    (member) =>
-      member.agentId === tag('mlflow.agent.id') &&
-      (!member.environment || member.environment === (tag('mlflow.agent.environment') || 'unassigned')),
-  );
+  return members.some((member) => member.agentId === tag('mlflow.agent.id'));
 };
 
 export const FleetAgentFilter = ({

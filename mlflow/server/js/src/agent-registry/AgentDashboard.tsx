@@ -9,7 +9,7 @@ import { getAgentTraceMetricFilters, getAgentTraceNavigationFilters } from './ag
 import type { Agent } from './mockData';
 import { useAgentPreviewExperiment } from './useAgentPreviewExperiment';
 import { getAssetChangeEvents } from './assetChanges';
-import { InvestigationButton } from './AgentInvestigations';
+import { SnapshotActivityCharts } from './AgentSnapshotAnalytics';
 
 const AgentTimeline = ({
   agent,
@@ -45,16 +45,7 @@ const AgentTimeline = ({
 
   return (
     <Panel title="Agent timeline">
-      <Events
-        events={events}
-        renderAction={(event) =>
-          event.snapshotId !== undefined ? (
-            <InvestigationButton mode="change" snapshotId={event.snapshotId}>
-              Investigate change
-            </InvestigationButton>
-          ) : null
-        }
-      />
+      <Events events={events} />
     </Panel>
   );
 };
@@ -63,17 +54,22 @@ export const AgentDashboard = ({
   agent,
   environment,
   onEnvironmentChange,
+  compact = false,
 }: {
   agent: Agent;
   environment: string;
   onEnvironmentChange: (value: string) => void;
+  compact?: boolean;
 }) => {
   const { theme } = useDesignSystemTheme();
   const [searchParams, setSearchParams] = useSearchParams();
   const { data: experimentId, isLoading, error } = useAgentPreviewExperiment();
   const snapshot = searchParams.get('snapshot') ?? 'all';
   const version = searchParams.get('version') ?? 'all';
-  const activeTab = searchParams.get('dashboardTab') ?? 'usage';
+  const activeTab =
+    compact || searchParams.get('dashboardTab') === 'timeline'
+      ? 'usage'
+      : (searchParams.get('dashboardTab') ?? 'usage');
   const filterOptions = useMemo(
     () => ({ agentId: agent.id, environment, snapshotId: snapshot, version }),
     [agent.id, environment, snapshot, version],
@@ -118,46 +114,58 @@ export const AgentDashboard = ({
         tooltipLinkUrlBuilder={() => agentPath(agent.id, 'traces', environment)}
         hideTooltipLinks
         hideIssueDetection
-        toolbarAddons={
-          <div css={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
-            <EnvironmentFilter value={environment} onChange={onEnvironmentChange} />
-            {activeTab === 'tool-calls' && (
-              <InvestigationButton mode="dependencies">Inspect affected requests</InvestigationButton>
-            )}
-            <SimpleSelect
-              id="mlflow.agent_registry.dashboard.snapshot"
-              componentId="mlflow.agent_registry.dashboard.snapshot"
-              aria-label="Snapshot"
-              value={snapshot}
-              onChange={(event) => updateParam('snapshot', event.target.value)}
-              css={{ width: 150 }}
-            >
-              <SimpleSelectOption value="all">All snapshots</SimpleSelectOption>
-              {agent.snapshots.map((item) => (
-                <SimpleSelectOption key={item.id} value={String(item.id)}>
-                  Snapshot #{item.id}
-                </SimpleSelectOption>
-              ))}
-            </SimpleSelect>
-            <SimpleSelect
-              id="mlflow.agent_registry.dashboard.version"
-              componentId="mlflow.agent_registry.dashboard.version"
-              aria-label="Publisher version"
-              value={version}
-              onChange={(event) => updateParam('version', event.target.value)}
-              css={{ width: 150 }}
-            >
-              <SimpleSelectOption value="all">All versions</SimpleSelectOption>
-              {Array.from(new Set(agent.snapshots.map((item) => item.publisherVersion))).map((item) => (
-                <SimpleSelectOption key={item} value={item}>
-                  Version {item}
-                </SimpleSelectOption>
-              ))}
-            </SimpleSelect>
-          </div>
+        hideTabs={compact}
+        snapshotAnnotations={agent.snapshots.map((item) => ({ at: item.createdAt, label: `#${item.id}` }))}
+        usageContent={
+          !compact && (
+            <SnapshotActivityCharts
+              agent={{
+                ...agent,
+                snapshots: agent.snapshots.filter(
+                  (item) =>
+                    (snapshot === 'all' || String(item.id) === snapshot) &&
+                    (version === 'all' || item.publisherVersion === version),
+                ),
+              }}
+            />
+          )
         }
-        timelineContent={
-          <AgentTimeline agent={agent} environment={environment} snapshot={snapshot} version={version} />
+        toolbarAddons={
+          !compact && (
+            <div css={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
+              <EnvironmentFilter value={environment} onChange={onEnvironmentChange} />
+              <SimpleSelect
+                id="mlflow.agent_registry.dashboard.snapshot"
+                componentId="mlflow.agent_registry.dashboard.snapshot"
+                aria-label="Snapshot"
+                value={snapshot}
+                onChange={(event) => updateParam('snapshot', event.target.value)}
+                css={{ width: 150 }}
+              >
+                <SimpleSelectOption value="all">All snapshots</SimpleSelectOption>
+                {agent.snapshots.map((item) => (
+                  <SimpleSelectOption key={item.id} value={String(item.id)}>
+                    Snapshot #{item.id}
+                  </SimpleSelectOption>
+                ))}
+              </SimpleSelect>
+              <SimpleSelect
+                id="mlflow.agent_registry.dashboard.version"
+                componentId="mlflow.agent_registry.dashboard.version"
+                aria-label="Publisher version"
+                value={version}
+                onChange={(event) => updateParam('version', event.target.value)}
+                css={{ width: 150 }}
+              >
+                <SimpleSelectOption value="all">All versions</SimpleSelectOption>
+                {Array.from(new Set(agent.snapshots.map((item) => item.publisherVersion))).map((item) => (
+                  <SimpleSelectOption key={item} value={item}>
+                    Version {item}
+                  </SimpleSelectOption>
+                ))}
+              </SimpleSelect>
+            </div>
+          )
         }
       />
     </div>

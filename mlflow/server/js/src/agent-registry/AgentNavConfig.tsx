@@ -6,7 +6,6 @@ import {
   ModelsIcon,
   PlusMinusSquareIcon,
   PuzzleIcon,
-  UserGroupIcon,
 } from '@databricks/design-system';
 
 export type AgentNavItem = { key: string; label: string; icon: ReactNode };
@@ -29,7 +28,6 @@ export const agentNavSections: { label: string; items: AgentNavItem[] }[] = [
     items: [
       { key: 'snapshots', label: 'Agent snapshots', icon: <ModelsIcon /> },
       { key: 'assets', label: 'AI assets', icon: <PuzzleIcon /> },
-      { key: 'related', label: 'Related agents', icon: <UserGroupIcon /> },
       { key: 'endpoints', label: 'Access endpoints', icon: <McpIcon /> },
     ],
   },

@@ -15,7 +15,7 @@ import {
 } from '@databricks/web-shared/model-trace-explorer';
 import { setupServer } from '../../../../common/utils/setup-msw';
 import { rest } from 'msw';
-import { OverviewChartProvider } from '../OverviewChartContext';
+import { OverviewChartProvider, type OverviewChartContextValue } from '../OverviewChartContext';
 import { getAjaxUrl } from '@mlflow/mlflow/src/common/utils/FetchUtils';
 
 // Helper to create a token stats percentile data point
@@ -70,7 +70,7 @@ describe('TraceTokenStatsChart', () => {
       },
     });
 
-  const renderComponent = (contextOverrides: Partial<typeof defaultContextProps> = {}) => {
+  const renderComponent = (contextOverrides: Partial<OverviewChartContextValue> = {}) => {
     const queryClient = createQueryClient();
     const contextProps = { ...defaultContextProps, ...contextOverrides };
     return renderWithIntl(
@@ -167,6 +167,15 @@ describe('TraceTokenStatsChart', () => {
     ];
 
     const mockAvgDataPoints = [createAvgTokenStatsDataPoint(2500)];
+
+    it('renders snapshot changes alongside token percentiles', async () => {
+      setupTraceMetricsHandler(mockPercentileDataPoints, mockAvgDataPoints);
+      renderComponent({ snapshotAnnotations: [{ at: '2025-12-22T10:30:00Z', label: 'Snapshot #8' }] });
+      expect(await screen.findByText('Tokens per Trace')).toBeInTheDocument();
+      expect(screen.getAllByTestId('reference-line').map((line) => line.getAttribute('data-label'))).toContain(
+        'Snapshot #8',
+      );
+    });
 
     it('should render chart with all time buckets', async () => {
       setupTraceMetricsHandler(mockPercentileDataPoints, mockAvgDataPoints);

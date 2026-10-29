@@ -7,13 +7,9 @@ export type AssetChange = {
   previousVersion?: string;
 };
 
-export const getSnapshotAssetChanges = (
-  agent: Agent,
-  snapshot: AgentSnapshot,
-  baseline?: AgentSnapshot,
-): AssetChange[] => {
+export const getSnapshotAssetChanges = (agent: Agent, snapshot: AgentSnapshot): AssetChange[] => {
   const snapshotIndex = agent.snapshots.findIndex((item) => item.id === snapshot.id);
-  const previous = baseline ?? agent.snapshots[snapshotIndex + 1];
+  const previous = agent.snapshots[snapshotIndex + 1];
   if (!previous) return [];
 
   const key = (asset: AgentAsset) => `${asset.kind}:${asset.name}`;

@@ -22,6 +22,7 @@ import {
   TracesTableColumnGroup,
   FilterOperator,
   shouldUseInfinitePaginatedTraces,
+  type TracesTableColumn,
 } from '@databricks/web-shared/genai-traces-table';
 import { useTraceMetricsQuery } from '../../../../pages/experiment-overview/hooks/useTraceMetricsQuery';
 import { useLogTelemetryEvent } from '@mlflow/mlflow/src/telemetry/hooks/useLogTelemetryEvent';
@@ -250,6 +251,81 @@ describe('TracesV3Logs', () => {
     renderComponent({ disableActions: true });
     await waitForRoutesToBeRendered();
     expect(jest.mocked(GenAITracesTableToolbar).mock.calls.at(-1)?.[0].traceActions).toEqual({});
+  });
+
+  it.each([false, true])(
+    'adds default columns without duplicating discovered metadata (custom defaults: %s)',
+    async (customDefaults) => {
+      const instanceColumn: TracesTableColumn = {
+        id: 'custom_metadata:service.instance.id',
+        label: 'Instance ID',
+        type: TracesTableColumnType.TRACE_INFO,
+        group: TracesTableColumnGroup.BASE,
+      };
+      const requestTimeColumn: TracesTableColumn = {
+        id: REQUEST_TIME_COLUMN_ID,
+        label: 'Request Time',
+        type: TracesTableColumnType.TRACE_INFO,
+      };
+      jest.mocked(useMlflowTracesTableMetadata).mockReturnValue({
+        assessmentInfos: [],
+        allColumns: [requestTimeColumn, { ...instanceColumn, label: 'service.instance.id' }],
+        totalCount: 0,
+        isLoading: false,
+        error: null,
+        isEmpty: false,
+        tableFilterOptions: { source: [] },
+        evaluatedTraces: [],
+        otherEvaluatedTraces: [],
+      });
+      jest.mocked(useSetInitialTimeFilter).mockReturnValue({ isInitialTimeFilterLoading: false });
+      jest.mocked(useSearchMlflowTraces).mockReturnValue({ data: [], isLoading: false, isFetching: false });
+      renderComponent({
+        additionalDefaultColumns: [instanceColumn],
+        ...(customDefaults
+          ? { customDefaultSelectedColumns: (column: TracesTableColumn) => column.id === REQUEST_TIME_COLUMN_ID }
+          : {}),
+      });
+      await waitForRoutesToBeRendered();
+      const selectionCall = jest.mocked(useSelectedColumns).mock.calls.at(-1);
+      expect(selectionCall?.[1]).toEqual([requestTimeColumn, instanceColumn]);
+      expect(selectionCall?.[2]?.(selectionCall[1])).toEqual([requestTimeColumn, instanceColumn]);
+    },
+  );
+
+  it('provides additional default columns without sampled metadata', async () => {
+    const instanceColumn: TracesTableColumn = {
+      id: 'custom_metadata:service.instance.id',
+      label: 'Instance ID',
+      type: TracesTableColumnType.TRACE_INFO,
+      group: TracesTableColumnGroup.BASE,
+    };
+    jest.mocked(useMlflowTracesTableMetadata).mockReturnValue({
+      assessmentInfos: [],
+      allColumns: [],
+      totalCount: 0,
+      isLoading: false,
+      error: null,
+      isEmpty: false,
+      tableFilterOptions: { source: [] },
+      evaluatedTraces: [],
+      otherEvaluatedTraces: [],
+    });
+    jest.mocked(useSelectedColumns).mockImplementation((_id, columns, defaults) => ({
+      selectedColumns: defaults?.(columns) ?? columns,
+      toggleColumns: jest.fn(),
+      setSelectedColumns: jest.fn(),
+    }));
+    jest.mocked(useSetInitialTimeFilter).mockReturnValue({ isInitialTimeFilterLoading: false });
+    jest.mocked(useSearchMlflowTraces).mockReturnValue({
+      data: [],
+      isLoading: false,
+      isFetching: false,
+    });
+    renderComponent({ additionalDefaultColumns: [instanceColumn] });
+    await waitForRoutesToBeRendered();
+    expect(await screen.findByRole('columnheader', { name: /Instance ID/ })).toBeInTheDocument();
+    expect(jest.mocked(useSelectedColumns).mock.calls.at(-1)?.[1]).toEqual([instanceColumn]);
   });
 
   /**

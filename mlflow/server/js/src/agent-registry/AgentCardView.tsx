@@ -3,6 +3,7 @@ import {
   CopyIcon,
   SegmentedControlButton,
   SegmentedControlGroup,
+  Tag,
   Typography,
   useDesignSystemTheme,
 } from '@databricks/design-system';
@@ -120,7 +121,11 @@ export const AgentCardView = ({ card }: { card: Record<string, unknown> }) => {
   const { theme } = useDesignSystemTheme();
   const [view, setView] = useState('rendered');
   const raw = JSON.stringify(card, null, 2);
-  const metadata = Object.fromEntries(metadataKeys.filter((key) => key in card).map((key) => [key, card[key]]));
+  const metadata = Object.fromEntries(
+    metadataKeys
+      .filter((key) => key in card && !['name', 'description', 'version', 'protocolVersion'].includes(key))
+      .map((key) => [key, card[key]]),
+  );
   const additional = Object.fromEntries(
     Object.entries(card).filter(([key]) => !metadataKeys.includes(key) && !sectionKeys.includes(key)),
   );
@@ -176,7 +181,30 @@ export const AgentCardView = ({ card }: { card: Record<string, unknown> }) => {
           aria-label="Rendered A2A card"
           css={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: theme.spacing.lg }}
         >
-          <Panel title="Metadata">
+          <header
+            css={{
+              display: 'grid',
+              gap: theme.spacing.sm,
+              paddingBottom: theme.spacing.md,
+              borderBottom: `1px solid ${theme.colors.border}`,
+            }}
+          >
+            <div css={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
+              <Typography.Title level={3} withoutMargins>
+                {typeof card['name'] === 'string' ? card['name'] : 'Agent card'}
+              </Typography.Title>
+              {typeof card['version'] === 'string' && (
+                <Tag componentId="mlflow.agent_registry.card.version">v{card['version']}</Tag>
+              )}
+              {typeof card['protocolVersion'] === 'string' && (
+                <Tag componentId="mlflow.agent_registry.card.protocol">A2A {card['protocolVersion']}</Tag>
+              )}
+            </div>
+            {typeof card['description'] === 'string' && (
+              <Typography.Text color="secondary">{card['description']}</Typography.Text>
+            )}
+          </header>
+          <Panel title="Connection & identity">
             <CardFields fields={metadata} />
           </Panel>
           {card['capabilities'] !== undefined && (
@@ -201,37 +229,45 @@ export const AgentCardView = ({ card }: { card: Record<string, unknown> }) => {
             </Panel>
           )}
           <Panel title="Skills">
-            {skills.length ? (
-              skills.map((value, index) => {
-                const skill = recordSchema.safeParse(value);
-                const name =
-                  skill.success && typeof skill.data['name'] === 'string' ? skill.data['name'] : `Skill ${index + 1}`;
-                return (
-                  <section
-                    key={index}
-                    css={{
-                      paddingBlock: theme.spacing.md,
-                      borderBottom: `1px solid ${theme.colors.border}`,
-                      '&:first-of-type': { paddingTop: 0 },
-                      '&:last-of-type': { borderBottom: 0, paddingBottom: 0 },
-                    }}
-                  >
-                    <Typography.Title level={5} css={{ marginTop: 0 }}>
-                      {name}
-                    </Typography.Title>
-                    {skill.success ? (
-                      <CardFields
-                        fields={Object.fromEntries(Object.entries(skill.data).filter(([key]) => key !== 'name'))}
-                      />
-                    ) : (
-                      <CardValue value={value} />
-                    )}
-                  </section>
-                );
-              })
-            ) : (
-              <Typography.Text color="secondary">No skills declared.</Typography.Text>
-            )}
+            <div
+              css={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))',
+                gap: theme.spacing.md,
+              }}
+            >
+              {skills.length ? (
+                skills.map((value, index) => {
+                  const skill = recordSchema.safeParse(value);
+                  const name =
+                    skill.success && typeof skill.data['name'] === 'string' ? skill.data['name'] : `Skill ${index + 1}`;
+                  return (
+                    <section
+                      key={index}
+                      css={{
+                        padding: theme.spacing.md,
+                        border: `1px solid ${theme.colors.border}`,
+                        borderRadius: 4,
+                        minWidth: 0,
+                      }}
+                    >
+                      <Typography.Title level={5} css={{ marginTop: 0 }}>
+                        {name}
+                      </Typography.Title>
+                      {skill.success ? (
+                        <CardFields
+                          fields={Object.fromEntries(Object.entries(skill.data).filter(([key]) => key !== 'name'))}
+                        />
+                      ) : (
+                        <CardValue value={value} />
+                      )}
+                    </section>
+                  );
+                })
+              ) : (
+                <Typography.Text color="secondary">No skills declared.</Typography.Text>
+              )}
+            </div>
           </Panel>
           <Panel title="Security & authentication">
             <div css={{ display: 'grid', gap: theme.spacing.md }}>

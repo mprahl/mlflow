@@ -20,6 +20,45 @@ import { useSearchMlflowTraces } from '../shared/web-shared/genai-traces-table/h
 import ExperimentEvaluationRunsPage from '../experiment-tracking/pages/experiment-evaluation-runs/ExperimentEvaluationRunsPage';
 import type { ExperimentEvaluationRunsPageProps } from '../experiment-tracking/pages/experiment-evaluation-runs/ExperimentEvaluationRunsPage';
 import type { RunEntity } from '../experiment-tracking/types';
+import { agentTraceColumns } from './agentTraceColumns';
+import type { GenAIJourneyExtensions } from '../experiment-tracking/pages/experiment-overview/ExperimentGenAIJourneyOverviewPage';
+
+jest.mock('../experiment-tracking/pages/experiment-overview/ExperimentGenAIJourneyOverviewPage', () => ({
+  ExperimentGenAIJourneyOverviewPage: ({
+    headerContent,
+    footerContent,
+    tracingSetup,
+    baseTraceFilters,
+  }: GenAIJourneyExtensions) => (
+    <div>
+      {headerContent}
+      <div data-testid="shared-agent-overview">{baseTraceFilters?.join('|')}</div>
+      {baseTraceFilters?.join('').includes('starter-agent') ? (
+        tracingSetup
+      ) : (
+        <div>Build a continuous quality loop in 4 steps</div>
+      )}
+      {footerContent}
+    </div>
+  ),
+}));
+
+jest.mock('../experiment-tracking/pages/experiment-overview/hooks/useGenAIOverviewEvalState', () => ({
+  useGenAIOverviewEvalState: () => ({
+    status: 'ready',
+    runUuid: 'eval-preview',
+    runCount: 2,
+    assessmentScoreNames: ['quality'],
+    scorePoints: [
+      {
+        runUuid: 'eval-preview',
+        runName: 'Preview evaluation',
+        timestampMs: Date.parse('2026-10-22T00:00:00Z'),
+        scores: { quality: 0.9 },
+      },
+    ],
+  }),
+}));
 
 jest.mock('../experiment-tracking/pages/experiment-evaluation-runs/ExperimentEvaluationRunsPage', () => ({
   __esModule: true,
@@ -87,11 +126,16 @@ jest.mock('../experiment-tracking/components/experiment-page/components/traces-v
   TracesV3Logs: ({
     additionalFilters,
     initialGroupBySession,
+    additionalDefaultColumns,
   }: {
     additionalFilters?: Array<{ key?: string; value?: string }>;
     initialGroupBySession?: boolean;
+    additionalDefaultColumns?: { id: string; label: string }[];
   }) => (
-    <div data-testid="agent-traces-query-filters">{JSON.stringify({ additionalFilters, initialGroupBySession })}</div>
+    <>
+      <div data-testid="agent-traces-query-filters">{JSON.stringify({ additionalFilters, initialGroupBySession })}</div>
+      <div data-testid="agent-traces-columns">{JSON.stringify(additionalDefaultColumns)}</div>
+    </>
   ),
 }));
 
@@ -139,7 +183,7 @@ const FleetDetailWithSidebar = () => {
 
 describe('agent registry preview', () => {
   beforeEach(() => {
-    jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-23T12:00:00Z'));
+    jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-28T12:00:00Z'));
   });
 
   afterEach(() => {
@@ -155,30 +199,74 @@ describe('agent registry preview', () => {
     renderPage('/agents/support-agent/overview');
     expect(screen.queryByRole('navigation', { name: 'Agent navigation' })).not.toBeInTheDocument();
     expect(screen.getByText('Build a continuous quality loop in 4 steps')).toBeInTheDocument();
-    expect(screen.getByText('Publisher version 2.4.0')).toBeInTheDocument();
+    expect(screen.getByTestId('shared-agent-overview')).toHaveTextContent(
+      "trace.tag.`mlflow.agent.id` = 'support-agent'",
+    );
     expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute(
       'href',
       '/agents/support-agent/dashboard?environment=all',
     );
     expect(screen.getByRole('link', { name: 'View timeline' })).toHaveAttribute(
       'href',
-      '/agents/support-agent/dashboard?environment=all&dashboardTab=timeline',
+      '/agents/support-agent/snapshots?view=timeline',
     );
   });
 
-  it('links an AI asset change in recent activity to its snapshot', () => {
+  it('paginates Overview assets and resets pagination when filters change', async () => {
+    const user = userEvent.setup();
     renderPage('/agents/support-agent/overview');
-    expect(screen.getByRole('link', { name: 'support-system updated' })).toHaveAttribute(
+    const section = screen.getByRole('heading', { name: 'AI assets' }).closest('section');
+    if (!section) throw new Error('Missing AI assets section');
+    const assets = within(section);
+    const firstPage = assets.getAllByRole('row').map((row) => row.textContent);
+    expect(firstPage).toHaveLength(6);
+    expect(assets.getByRole('button', { name: 'Previous' })).toBeDisabled();
+    await user.click(assets.getByRole('button', { name: 'Next' }));
+    expect(assets.getAllByRole('row').map((row) => row.textContent)).not.toEqual(firstPage);
+    await user.click(assets.getByRole('button', { name: 'Previous' }));
+    expect(assets.getAllByRole('row').map((row) => row.textContent)).toEqual(firstPage);
+    await user.click(assets.getByRole('button', { name: 'Next' }));
+    await user.click(assets.getByRole('button', { name: 'Next' }));
+    expect(assets.getAllByRole('row').length).toBeLessThanOrEqual(6);
+    expect(assets.getByRole('button', { name: 'Next' })).toBeDisabled();
+    await user.type(assets.getByPlaceholderText('Search AI assets'), 'support-system');
+    expect(assets.getAllByRole('row')).toHaveLength(3);
+    expect(assets.getByText('1-2 of 2 assets')).toBeInTheDocument();
+    expect(assets.getByRole('button', { name: 'Previous' })).toBeDisabled();
+    await user.clear(assets.getByPlaceholderText('Search AI assets'));
+    await user.click(assets.getByRole('button', { name: 'Next' }));
+    await user.click(assets.getByTestId('mlflow.agent_registry.assets.filter.agent_versions'));
+    await user.click(screen.getByRole('option', { name: 'Version 2.3.1' }));
+    expect(assets.getByRole('button', { name: 'Previous' })).toBeDisabled();
+    expect(assets.getByRole('link', { name: 'support-system' })).toHaveAttribute(
+      'href',
+      '/prompts/support-system?promptVersion=3',
+    );
+  });
+
+  it('keeps the full AI assets page unpaginated', () => {
+    renderPage('/agents/support-agent/assets');
+    expect(screen.getAllByRole('row').length).toBeGreaterThan(6);
+    expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();
+  });
+
+  it('lists snapshots and prominent access endpoints in Overview', () => {
+    renderPage('/agents/support-agent/overview');
+    expect(screen.getByRole('link', { name: 'Snapshot #8' })).toHaveAttribute(
       'href',
       '/agents/support-agent/snapshots?snapshot=8',
     );
     expect(screen.queryByText('Snapshot 8 created')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'production' })).toHaveAttribute(
+      'href',
+      '/agents/support-agent/endpoints?endpoint=production',
+    );
   });
 
   it('keeps first-trace onboarding for a new agent with the RFC agent selector', async () => {
     const user = userEvent.setup();
     renderPage('/agents/starter-agent/overview');
-    expect(screen.getByText('Send your first trace to MLflow in just a minute')).toBeInTheDocument();
+    expect(screen.getByTestId('shared-agent-overview')).toHaveTextContent('starter-agent');
     expect(screen.getByText(/MLFLOW_AGENT_ID='starter-agent'/)).toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'AI Assistant' }));
     expect(screen.getByText(/mlflow.set_agent\(agent_id="starter-agent"\)/)).toBeInTheDocument();
@@ -198,7 +286,7 @@ describe('agent registry preview', () => {
 
   it('uses a registry table for fleets', () => {
     renderPage('/fleets');
-    expect(screen.getByRole('columnheader', { name: 'Selected environments' })).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Selected environments' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Customer experience' })).toHaveAttribute(
       'href',
       '/fleets/customer-experience',
@@ -209,24 +297,23 @@ describe('agent registry preview', () => {
     const user = userEvent.setup();
     renderPage('/agents/support-agent/snapshots');
     expect(screen.getByRole('columnheader', { name: 'Snapshots' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Viewing snapshot #8' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Viewing snapshot #9' })).toBeInTheDocument();
     expect(screen.queryByText('Status')).not.toBeInTheDocument();
     expect(screen.queryByText(/^(draft|active|deprecated)$/)).not.toBeInTheDocument();
-    expect(screen.getByText('support-system updated')).toBeInTheDocument();
+    expect(screen.getByRole('row', { name: /Snapshot #8\b/ })).toHaveTextContent('support-system updated');
     expect(screen.getByRole('link', { name: 'support-system' })).toHaveAttribute(
       'href',
       '/prompts/support-system?promptVersion=4',
     );
     await user.click(screen.getByRole('radio', { name: 'Compare' }));
-    expect(screen.getByText('Compare snapshot #8 with #7')).toBeInTheDocument();
+    expect(screen.getByText('Compare snapshot #9 with #8')).toBeInTheDocument();
     expect(screen.queryByText(/^(draft|active|deprecated)$/)).not.toBeInTheDocument();
-    expect(screen.getByText('version 3')).toBeInTheDocument();
-    expect(screen.getByText('version 4')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'version 3' })).toHaveAttribute(
-      'href',
-      '/prompts/support-system?promptVersion=3',
-    );
-    expect(screen.getByRole('link', { name: 'version 4' })).toHaveAttribute(
+    expect(screen.getAllByText('version 3').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('version 4').length).toBeGreaterThan(0);
+    expect(
+      within(screen.getByRole('row', { name: /^skill · refund-policy/ })).getByRole('link', { name: 'version 3' }),
+    ).toHaveAttribute('href', '/skills/refund-policy?version=3');
+    expect(screen.getAllByRole('link', { name: 'version 4' })[0]).toHaveAttribute(
       'href',
       '/prompts/support-system?promptVersion=4',
     );
@@ -235,14 +322,52 @@ describe('agent registry preview', () => {
         name: 'Select as compared version',
       }),
     );
-    expect(screen.getByText('Compare snapshot #8 with #6')).toBeInTheDocument();
+    expect(screen.getByText('Compare snapshot #9 with #6')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Switch sides' }));
-    expect(screen.getByText('Compare snapshot #6 with #8')).toBeInTheDocument();
+    expect(screen.getByText('Compare snapshot #6 with #9')).toBeInTheDocument();
     await user.click(screen.getByRole('radio', { name: 'Preview' }));
     await user.click(screen.getByRole('row', { name: /Snapshot #8\b/ }));
     expect(screen.getByRole('tab', { name: 'AI assets' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByText('Provider model')).toBeInTheDocument();
     expect(screen.queryByText('vprovider model')).not.toBeInTheDocument();
+  });
+
+  it('filters the snapshot list by publisher versions and harnesses with a recoverable empty state', async () => {
+    const user = userEvent.setup();
+    renderPage('/agents/support-agent/snapshots');
+    await user.click(screen.getByRole('combobox', { name: 'Publisher versions' }));
+    await user.click(screen.getByRole('option', { name: 'Version 2.3.1' }));
+    expect(screen.getByRole('heading', { name: 'Viewing snapshot #6' })).toBeInTheDocument();
+    expect(screen.queryByRole('row', { name: /Snapshot #8\b/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Compare' })).toBeDisabled();
+    await user.click(screen.getByRole('option', { name: 'Version 2.4.0' }));
+    expect(screen.getByRole('row', { name: /Snapshot #8\b/ })).toBeInTheDocument();
+    await user.click(screen.getByRole('option', { name: 'Version 2.3.1' }));
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('combobox', { name: 'Harnesses' }));
+    await user.click(screen.getByRole('option', { name: 'LangGraph 0.9' }));
+    expect(screen.getByText('No snapshots match these filters.')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /Viewing snapshot/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('option', { name: 'All harnesses' }));
+    expect(screen.getByRole('heading', { name: 'Viewing snapshot #9' })).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('combobox', { name: 'Publisher versions' }));
+    await user.click(screen.getByRole('option', { name: 'All versions' }));
+    expect(screen.getByRole('row', { name: /Snapshot #6\b/ })).toBeInTheDocument();
+  });
+
+  it('searches snapshots by source and exits comparison when filters change', async () => {
+    const user = userEvent.setup();
+    renderPage('/agents/support-agent/snapshots');
+    await user.click(screen.getByRole('radio', { name: 'Compare' }));
+    await user.type(screen.getByPlaceholderText('Search snapshots'), '7a12f2b');
+    expect(screen.getByRole('heading', { name: 'Viewing snapshot #6' })).toBeInTheDocument();
+    expect(screen.queryByText(/Compare snapshot/)).not.toBeInTheDocument();
+    await user.clear(screen.getByPlaceholderText('Search snapshots'));
+    await user.type(screen.getByPlaceholderText('Search snapshots'), 'snapshot #7');
+    expect(screen.getByRole('heading', { name: 'Viewing snapshot #7' })).toBeInTheDocument();
+    await user.clear(screen.getByPlaceholderText('Search snapshots'));
+    expect(screen.getByRole('heading', { name: 'Viewing snapshot #9' })).toBeInTheDocument();
   });
 
   it('shows pinned assets in their registry sections', () => {
@@ -252,7 +377,7 @@ describe('agent registry preview', () => {
     expect(screen.getByRole('columnheader', { name: 'Pinned version' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Used in snapshots' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Agent versions' })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: 'Last recorded' })).toHaveAttribute('aria-sort', 'descending');
+    expect(screen.getByRole('columnheader', { name: 'Last recorded' })).not.toHaveAttribute('aria-sort');
     expect(screen.getAllByRole('link', { name: 'support-system' })[0]).toHaveAttribute(
       'href',
       '/prompts/support-system?promptVersion=4',
@@ -273,7 +398,7 @@ describe('agent registry preview', () => {
       'href',
       '/prompts/support-system?promptVersion=4',
     );
-    expect(screen.getByRole('link', { name: 'order-lookup' })).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: 'order-lookup' }).length).toBeGreaterThan(0);
     await user.click(screen.getByRole('button', { name: 'Last 30 days' }));
     await user.click(screen.getByRole('option', { name: 'All time' }));
     expect(screen.getAllByRole('link', { name: 'support-system' })).toHaveLength(2);
@@ -307,30 +432,32 @@ describe('agent registry preview', () => {
     expect(screen.getByRole('link', { name: 'order-lookup' })).toBeInTheDocument();
   });
 
-  it('opens real traces scoped to the snapshot evidence environment', async () => {
+  it('shows snapshot performance charts and opens the snapshot-scoped trace view', async () => {
     const user = userEvent.setup();
     renderPage('/agents/support-agent/snapshots?snapshot=8&environment=staging');
     await user.click(screen.getByRole('tab', { name: 'Traces' }));
-    expect(useSearchMlflowTraces).toHaveBeenCalledWith(
-      expect.objectContaining({
-        limit: 5,
-        pageSize: 5,
-        filters: expect.arrayContaining([
-          expect.objectContaining({ key: 'mlflow.agent.id', value: 'support-agent' }),
-          expect.objectContaining({ key: 'mlflow.agent.snapshot_id', value: '8' }),
-          expect.objectContaining({ key: 'mlflow.agent.environment', value: 'staging' }),
-        ]),
-      }),
+    expect(screen.getByText('Snapshot performance')).toBeInTheDocument();
+    expect(screen.getByTestId('agent-dashboard-query-filters')).toHaveTextContent(
+      "trace.tag.`mlflow.agent.snapshot_id` = '8'",
     );
+    expect(screen.queryByTestId('agent-traces-query-filters')).not.toBeInTheDocument();
     await user.click(screen.getByRole('link', { name: 'View all traces' }));
     const props = JSON.parse(screen.getByTestId('agent-traces-query-filters').textContent ?? '{}');
     expect(props.additionalFilters).toContainEqual(
       expect.objectContaining({ key: 'mlflow.agent.snapshot_id', value: '8' }),
     );
-    expect(props.additionalFilters).toContainEqual(
+    expect(props.additionalFilters).not.toContainEqual(
       expect.objectContaining({ key: 'mlflow.agent.environment', value: 'staging' }),
     );
   });
+
+  it.each(['/agents/support-agent/traces', '/fleets/customer-experience/traces'])(
+    'includes Instance ID in default trace columns at %s',
+    (path) => {
+      renderPage(path);
+      expect(JSON.parse(screen.getByTestId('agent-traces-columns').textContent ?? '[]')).toEqual(agentTraceColumns);
+    },
+  );
 
   it('filters linked AI assets by snapshot and search text', async () => {
     const user = userEvent.setup();
@@ -379,23 +506,24 @@ describe('agent registry preview', () => {
     expect(screen.getByTestId('agent-dashboard-query-filters')).toHaveTextContent(
       "trace.tag.`mlflow.agent.snapshot_id` = '7'",
     );
-    expect(screen.getByTestId('agent-dashboard-query-filters')).toHaveTextContent(
+    expect(screen.getByTestId('agent-dashboard-query-filters')).not.toHaveTextContent(
       "trace.tag.`mlflow.agent.environment` = 'prod'",
     );
   });
 
-  it('previews recent snapshot evaluations and opens the filtered full view', async () => {
+  it('shows snapshot evaluation statistics and opens the filtered full view', async () => {
     const user = userEvent.setup();
     renderPage('/agents/support-agent/snapshots?snapshot=7&environment=prod');
     await user.click(screen.getByRole('tab', { name: 'Evaluations' }));
-    expect(screen.getByText('eval-support-prod-7')).toBeInTheDocument();
+    expect(screen.getByText('Evaluation statistics')).toBeInTheDocument();
+    expect(screen.getByText('Evaluation quality over time')).toBeInTheDocument();
     expect(screen.queryByText('eval-support-dev-7')).not.toBeInTheDocument();
     await user.click(screen.getByRole('link', { name: 'View all evaluations' }));
     expect(screen.getByRole('combobox', { name: 'Snapshots' })).toBeInTheDocument();
     expect(screen.getByTestId('agent-evaluation-query-filter')).toHaveTextContent(
       "tags.`mlflow.agent.snapshot_id` = '7'",
     );
-    expect(screen.getByTestId('agent-evaluation-query-filter')).toHaveTextContent(
+    expect(screen.getByTestId('agent-evaluation-query-filter')).not.toHaveTextContent(
       "tags.`mlflow.agent.environment` = 'prod'",
     );
   });
@@ -406,43 +534,51 @@ describe('agent registry preview', () => {
     expect(screen.queryByText('support-observability')).not.toBeInTheDocument();
   });
 
-  it('sorts pinned asset versions by last recorded time', async () => {
+  it('sorts AI assets by type and name and selects Related agents using Type', async () => {
     const user = userEvent.setup();
-    renderPage('/agents/support-agent/prompts');
-    await user.click(screen.getByRole('button', { name: 'Last recorded' }));
-    expect(screen.getByRole('columnheader', { name: 'Last recorded' })).toHaveAttribute('aria-sort', 'ascending');
-    expect(screen.getAllByRole('link', { name: 'support-system' })[0]).toHaveAttribute(
-      'href',
-      '/prompts/support-system?promptVersion=3',
-    );
+    renderPage('/agents/support-agent/assets');
+    expect(screen.queryByRole('tab', { name: 'Prompts' })).not.toBeInTheDocument();
+    const entries = screen
+      .getAllByRole('row')
+      .slice(1)
+      .map((row) => {
+        const cells = within(row).getAllByRole('cell');
+        return `${cells[1].textContent}:${cells[0].textContent}`;
+      });
+    expect(entries).toEqual([...entries].sort((left, right) => left.localeCompare(right)));
+    await user.click(screen.getByRole('combobox', { name: 'Type' }));
+    await user.click(screen.getByRole('option', { name: 'Related agents' }));
+    expect(screen.getByRole('columnheader', { name: 'Relationship' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Refund agent' })).toBeInTheDocument();
   });
 
   it('links MCP assets to their qualified registry entry', () => {
     renderPage('/agents/support-agent/mcp-servers');
-    expect(screen.getByRole('link', { name: 'order-lookup' })).toHaveAttribute(
-      'href',
-      '/mcp-registry/com.example%2Forder-lookup?version=1.0.0',
+    expect(screen.getAllByRole('link', { name: 'order-lookup' }).map((link) => link.getAttribute('href'))).toEqual(
+      expect.arrayContaining([
+        '/mcp-registry/com.example%2Forder-lookup?version=1.0.0',
+        '/mcp-registry/com.example%2Forder-lookup?version=1.2.0',
+      ]),
     );
   });
 
   it.each([
-    ['snapshots?environment=prod&snapshot=8', 'Investigate change', 'Behavior changes'],
-    ['dashboard?environment=prod&dashboardTab=tool-calls', 'Inspect affected requests', 'Dependency failures'],
-    ['assets?environment=prod&assetTab=tools', 'Inspect dependency failures', 'Dependency failures'],
-    ['traces?environment=prod&groupBy=session', 'Investigate runtime context', 'Runtime context'],
-  ])('opens an investigation from %s without replacing agent navigation', async (section, action, title) => {
-    const user = userEvent.setup();
+    'snapshots?environment=prod&snapshot=8',
+    'dashboard?environment=prod&dashboardTab=timeline',
+    'dashboard?environment=prod&dashboardTab=tool-calls',
+    'assets?environment=prod&assetTab=tools',
+    'assets?environment=prod&assetTab=mcp-servers',
+    'traces?environment=prod&groupBy=session',
+  ])('does not show investigation entry points in %s', (section) => {
     renderPage(`/agents/support-agent/${section}`);
-    await user.click(screen.getByRole('button', { name: action }));
-    expect(screen.getByRole('dialog', { name: `${title} - Support agent` })).toHaveTextContent(
-      'Illustrative evidence - read-only preview',
-    );
-    await user.keyboard('{Escape}');
-    expect(screen.getByRole('link', { name: 'Agent snapshots' })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Sessions' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', {
+        name: /Inspect affected requests|Inspect dependency failures|Investigate runtime context|Investigate change|Investigate behavior/,
+      }),
+    ).not.toBeInTheDocument();
   });
 
-  it('carries a fleet member environment into the agent page', async () => {
+  it('opens fleet members without environment restrictions', async () => {
     const user = userEvent.setup();
     renderPage('/fleets/customer-experience');
     expect(screen.getByTestId('agent-dashboard-query-filters')).toHaveTextContent(
@@ -450,53 +586,39 @@ describe('agent registry preview', () => {
     );
     await user.click(screen.getByRole('link', { name: 'Agents' }));
     expect(screen.getByRole('columnheader', { name: 'Owner' })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: 'Selected environment' })).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Selected environment' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Support agent' })).toHaveAttribute(
       'href',
-      '/agents/support-agent/dashboard?environment=prod',
+      '/agents/support-agent/dashboard',
     );
     await user.click(screen.getByRole('link', { name: 'Support agent' }));
-    expect(screen.getByTestId('agent-dashboard-query-filters')).toHaveTextContent(
+    expect(screen.getByTestId('agent-dashboard-query-filters')).not.toHaveTextContent(
       "trace.tag.`mlflow.agent.environment` = 'prod'",
     );
   });
 
-  it('filters fleet dashboard charts by environment and retains the selection across tabs', async () => {
+  it('ignores legacy fleet environment parameters across dashboard tabs', async () => {
     const user = userEvent.setup();
     renderPage('/fleets/release-readiness/dashboard?agents=support-agent&environment=staging');
     const filters = screen.getByTestId('agent-dashboard-query-filters');
     expect(filters).toHaveTextContent("trace.tag.`mlflow.agent.preview.fleet.release-readiness` = 'true'");
     expect(filters).toHaveTextContent("trace.tag.`mlflow.agent.id` = 'support-agent'");
-    expect(filters).toHaveTextContent("trace.tag.`mlflow.agent.environment` = 'staging'");
+    expect(filters).not.toHaveTextContent('mlflow.agent.environment');
     await user.click(screen.getByRole('button', { name: 'Quality' }));
-    expect(filters).toHaveTextContent("trace.tag.`mlflow.agent.environment` = 'staging'");
-    await user.click(screen.getByTestId('mlflow.agent_registry.environment_filter'));
-    await user.click(screen.getByRole('option', { name: 'Staging' }));
     expect(filters).not.toHaveTextContent('mlflow.agent.environment');
     expect(filters).toHaveTextContent("trace.tag.`mlflow.agent.id` = 'support-agent'");
-    await user.click(screen.getByRole('option', { name: 'Dev' }));
-    expect(filters).toHaveTextContent("trace.tag.`mlflow.agent.environment` = 'dev'");
-    await user.click(screen.getByRole('option', { name: 'Staging' }));
-    expect(filters).not.toHaveTextContent('mlflow.agent.environment');
-    expect(
-      screen.getByText(/Charts show all fleet-member environments when multiple are selected/),
-    ).toBeInTheDocument();
+    expect(screen.queryByTestId('mlflow.agent_registry.environment_filter')).not.toBeInTheDocument();
   });
 
-  it('filters the fleet dashboard timeline across environments without dropping membership restrictions', async () => {
-    const user = userEvent.setup();
+  it('shows fleet timeline events across all member environments', () => {
     renderPage(
       '/fleets/release-readiness/dashboard?dashboardTab=timeline&environment=dev&startTimeLabel=CUSTOM&startTime=2026-10-01T00:00:00Z&endTime=2026-10-23T00:00:00Z',
     );
-    expect(screen.queryByRole('link', { name: 'Support agent: Snapshot 8 evaluated' })).not.toBeInTheDocument();
-    await user.click(screen.getByTestId('mlflow.agent_registry.environment_filter'));
-    await user.click(screen.getByRole('option', { name: 'Staging' }));
     expect(screen.getByRole('link', { name: 'Support agent: Snapshot 8 evaluated' })).toHaveAttribute(
       'href',
-      '/agents/support-agent/snapshots?environment=staging&snapshot=8',
+      '/agents/support-agent/snapshots?environment=dev&snapshot=8',
     );
-    await user.click(screen.getByRole('option', { name: 'Prod' }));
-    expect(screen.queryByRole('link', { name: 'Support agent: Snapshot 7 evaluated' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Support agent: Snapshot 7 evaluated' })).toBeInTheDocument();
     expect(screen.queryByText(/Charts show all fleet-member environments/)).not.toBeInTheDocument();
   });
 
@@ -510,35 +632,21 @@ describe('agent registry preview', () => {
     );
   });
 
-  it.each(['staging', 'unassigned'])('restores the fleet trace environment %s from the URL', (environment) => {
+  it.each(['staging', 'unassigned'])('ignores the old fleet trace environment %s in the URL', (environment) => {
     renderPage(`/fleets/release-readiness/traces?environment=${environment}`);
     const props = JSON.parse(screen.getByTestId('agent-traces-query-filters').textContent ?? '{}');
     expect(props.additionalFilters).toEqual([
       expect.objectContaining({ key: 'mlflow.agent.preview.fleet.release-readiness', value: 'true' }),
-      expect.objectContaining({ key: 'mlflow.agent.environment', operator: '=', value: environment }),
     ]);
-    expect(screen.getByTestId('mlflow.agent_registry.environment_filter')).toHaveTextContent(environment);
+    expect(screen.queryByTestId('mlflow.agent_registry.environment_filter')).not.toBeInTheDocument();
   });
 
-  it('selects and clears fleet trace environments without losing membership scope or session grouping', async () => {
-    const user = userEvent.setup();
+  it('keeps fleet trace membership scope and session grouping without environments', () => {
     renderPage('/fleets/release-readiness/traces?agents=support-agent&groupBy=session');
     const scope = [
       expect.objectContaining({ key: 'mlflow.agent.preview.fleet.release-readiness', value: 'true' }),
       expect.objectContaining({ key: 'mlflow.agent.id', value: 'support-agent' }),
     ];
-    await user.click(screen.getByTestId('mlflow.agent_registry.environment_filter'));
-    await user.click(screen.getByRole('option', { name: 'Staging' }));
-    await user.click(screen.getByRole('option', { name: 'Dev' }));
-    expect(JSON.parse(screen.getByTestId('agent-traces-query-filters').textContent ?? '{}')).toEqual({
-      additionalFilters: [
-        ...scope,
-        expect.objectContaining({ key: 'mlflow.agent.environment', operator: 'RLIKE', value: '^(staging|dev)$' }),
-      ],
-      initialGroupBySession: true,
-    });
-    await user.click(screen.getByRole('option', { name: 'Staging' }));
-    await user.click(screen.getByRole('option', { name: 'Dev' }));
     expect(JSON.parse(screen.getByTestId('agent-traces-query-filters').textContent ?? '{}')).toEqual({
       additionalFilters: scope,
       initialGroupBySession: true,
@@ -570,19 +678,30 @@ describe('agent registry preview', () => {
     );
   });
 
-  it('shows mixed fleet environments in an Agents-style directory', () => {
+  it('shows the fleet directory without environment restrictions', () => {
     renderPage('/fleets/release-readiness/agents');
     expect(screen.getByRole('link', { name: 'Support agent' })).toHaveAttribute(
       'href',
-      '/agents/support-agent/dashboard?environment=staging',
+      '/agents/support-agent/dashboard',
     );
     expect(screen.getByRole('link', { name: 'Knowledge agent' })).toHaveAttribute(
       'href',
-      '/agents/knowledge-agent/dashboard?environment=dev',
+      '/agents/knowledge-agent/dashboard',
     );
     expect(screen.getByRole('columnheader', { name: 'Owner' })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: 'Selected environment' })).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Selected environment' })).not.toBeInTheDocument();
   });
+
+  it.each(['support-agent', 'none'])(
+    'shows all fleet members without an Agents dropdown for selection %s',
+    (selection) => {
+      renderPage(`/fleets/release-readiness/agents?agents=${selection}`);
+      expect(screen.queryByRole('combobox', { name: 'Agents' })).not.toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Support agent' })).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Knowledge agent' })).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Search fleet agents')).toBeInTheDocument();
+    },
+  );
 
   it('reuses the read-only evaluation page for fleet memberships', () => {
     renderPage('/fleets/release-readiness/evaluation-runs');
@@ -601,7 +720,7 @@ describe('agent registry preview', () => {
         },
       }) as RunEntity;
     expect(props?.runFilter?.(run('staging'))).toBe(true);
-    expect(props?.runFilter?.(run('dev'))).toBe(false);
+    expect(props?.runFilter?.(run('dev'))).toBe(true);
   });
 
   it('links fleet evaluation agents to their dashboard while retaining snapshot evidence links', () => {
@@ -633,14 +752,9 @@ describe('agent registry preview', () => {
     const matches = (candidate: RunEntity) =>
       jest.mocked(ExperimentEvaluationRunsPage).mock.calls.at(-1)?.[0]?.runFilter?.(candidate);
 
-    await user.click(screen.getByTestId('mlflow.agent_registry.environment_filter'));
-    await user.click(screen.getByRole('option', { name: 'Staging' }));
     expect(matches(run('support-agent', 'staging'))).toBe(true);
-    expect(matches(run('knowledge-agent', 'dev'))).toBe(false);
-    await user.click(screen.getByRole('option', { name: 'Dev' }));
     expect(matches(run('knowledge-agent', 'dev'))).toBe(true);
-    expect(matches(run('support-agent', 'dev'))).toBe(false);
-    await user.keyboard('{Escape}');
+    expect(matches(run('support-agent', 'dev'))).toBe(true);
     await user.click(screen.getByRole('combobox', { name: 'Snapshots' }));
     await user.click(screen.getByRole('option', { name: 'Support agent: Snapshot #8' }));
     expect(matches(run('support-agent', 'staging'))).toBe(true);
@@ -682,18 +796,14 @@ describe('agent registry preview', () => {
     expect(screen.queryByRole('combobox', { name: 'Publisher versions' })).not.toBeInTheDocument();
   });
 
-  it('passes the environment tag to the real dashboard', () => {
-    renderPage('/agents/support-agent/dashboard');
-    fireEvent.click(screen.getByTestId('mlflow.agent_registry.environment_filter'));
-    fireEvent.click(screen.getByText('Prod'));
-    expect(screen.getByTestId('agent-dashboard-query-filters')).toHaveTextContent(
-      "trace.tag.`mlflow.agent.environment` = 'prod'",
-    );
+  it('ignores the legacy environment tag in dashboard URLs', () => {
+    renderPage('/agents/support-agent/dashboard?environment=prod');
+    expect(screen.getByTestId('agent-dashboard-query-filters')).not.toHaveTextContent('mlflow.agent.environment');
   });
 
   it('shows the metric preview limitation for multiple environments', () => {
     renderPage('/agents/support-agent/dashboard?environment=dev,prod');
-    expect(screen.getByText(/Charts show all environments when multiple are selected/)).toBeInTheDocument();
+    expect(screen.queryByText(/Charts show all environments when multiple are selected/)).not.toBeInTheDocument();
     expect(screen.getByTestId('agent-dashboard-query-filters')).not.toHaveTextContent('mlflow.agent.environment');
   });
 
@@ -706,14 +816,19 @@ describe('agent registry preview', () => {
     expect(props.initialGroupBySession).toBe(true);
   });
 
-  it('filters the real traces table across two selected environments', () => {
-    renderPage('/agents/support-agent/traces');
-    fireEvent.click(screen.getByTestId('mlflow.agent_registry.environment_filter'));
-    fireEvent.click(screen.getByText('Dev'));
-    fireEvent.click(screen.getByText('Prod'));
+  it('filters traces by snapshot and publisher version', async () => {
+    const user = userEvent.setup();
+    renderPage('/agents/support-agent/traces?environment=dev,prod');
+    await user.click(screen.getByRole('combobox', { name: 'Snapshot' }));
+    await user.click(screen.getByRole('option', { name: 'Snapshot #7' }));
+    await user.click(screen.getByRole('combobox', { name: 'Publisher version' }));
+    await user.click(screen.getByRole('option', { name: '2.4.0' }));
     const props = JSON.parse(screen.getByTestId('agent-traces-query-filters').textContent ?? '{}');
     expect(props.additionalFilters).toContainEqual(
-      expect.objectContaining({ key: 'mlflow.agent.environment', operator: 'RLIKE', value: '^(dev|prod)$' }),
+      expect.objectContaining({ key: 'mlflow.agent.snapshot_id', value: '7' }),
+    );
+    expect(props.additionalFilters).toContainEqual(
+      expect.objectContaining({ key: 'mlflow.agent.version', value: '2.4.0' }),
     );
   });
 
@@ -725,7 +840,7 @@ describe('agent registry preview', () => {
     expect(props.additionalFilters).toContainEqual(
       expect.objectContaining({ key: 'mlflow.agent.id', value: 'support-agent' }),
     );
-    expect(props.additionalFilters).toContainEqual(
+    expect(props.additionalFilters).not.toContainEqual(
       expect.objectContaining({ key: 'mlflow.agent.environment', value: 'prod' }),
     );
     expect(props.initialGroupBySession).toBe(true);
@@ -738,20 +853,66 @@ describe('agent registry preview', () => {
     );
   });
 
-  it('filters the timeline by environment and links to snapshot evidence', () => {
+  it('shows recorded instance IDs in the snapshot timeline', () => {
+    jest.mocked(Date.now).mockReturnValue(Date.parse('2026-10-28T12:00:00Z'));
+    jest.mocked(useSearchMlflowTraces).mockReturnValue({
+      data: [
+        {
+          trace_id: 'trace-instance-example',
+          request_time: '2026-10-27T15:00:00Z',
+          request_preview: 'Refund request',
+          tags: { 'mlflow.agent.snapshot_id': '9' },
+          trace_metadata: { 'service.instance.id': 'support-worker-a' },
+          state: 'OK',
+          execution_duration: '1s',
+        },
+      ],
+      isLoading: false,
+      isFetching: false,
+    } as unknown as ReturnType<typeof useSearchMlflowTraces>);
+    try {
+      renderPage('/agents/support-agent/snapshots?view=timeline');
+      expect(screen.getByText('support-worker-a')).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: 'Timeline' })).toBeChecked();
+      expect(screen.getByRole('link', { name: 'Trace: Refund request' })).toHaveAttribute(
+        'href',
+        '/agents/support-agent/traces?selectedTraceId=trace-instance-example',
+      );
+    } finally {
+      jest
+        .mocked(useSearchMlflowTraces)
+        .mockReturnValue({ data: [], isLoading: false, isFetching: false } as unknown as ReturnType<
+          typeof useSearchMlflowTraces
+        >);
+    }
+  });
+
+  it('shows recent Support snapshot changes in the default timeline window', () => {
+    jest.mocked(Date.now).mockReturnValue(Date.parse('2026-10-28T12:00:00Z'));
+    renderPage('/agents/support-agent/snapshots?view=timeline');
+    for (const name of ['refund-policy updated', 'order-lookup updated', 'prepare_refund added']) {
+      expect(screen.getByRole('link', { name })).toHaveAttribute('href', '/agents/support-agent/snapshots?snapshot=9');
+    }
+    expect(screen.getByText('skill version 2 → 3')).toBeInTheDocument();
+    expect(screen.getByText('mcp version 1.0.0 → 1.2.0')).toBeInTheDocument();
+    expect(screen.queryByText('Agent-wide')).not.toBeInTheDocument();
+  });
+
+  it('ignores legacy timeline environments and keeps snapshot evidence links', () => {
     renderPage(
       '/agents/support-agent/dashboard?dashboardTab=timeline&environment=prod&startTimeLabel=CUSTOM&startTime=2026-10-01T00:00:00Z&endTime=2026-10-23T00:00:00Z',
     );
-    expect(screen.getByRole('link', { name: 'Snapshot 7 first observed' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Snapshot 8 evaluated' })).toHaveAttribute(
       'href',
-      '/agents/support-agent/snapshots?environment=prod&snapshot=7',
+      '/agents/support-agent/snapshots?snapshot=8',
     );
-    expect(screen.queryByText('Snapshot 8 evaluated')).not.toBeInTheDocument();
+    expect(screen.queryByText('Agent-wide')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('mlflow.agent_registry.environment_filter')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Snapshot 7 activated' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'support-system updated' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'A2A sync failed' })).toHaveAttribute(
       'href',
-      '/agents/support-agent/endpoints?environment=prod',
+      '/agents/support-agent/endpoints',
     );
   });
 
@@ -761,7 +922,7 @@ describe('agent registry preview', () => {
       '/agents/support-agent/dashboard?dashboardTab=timeline&version=2.3.1&startTimeLabel=CUSTOM&startTime=2026-10-20T00:00:00Z&endTime=2026-10-22T00:00:00Z',
     );
     expect(screen.getByText('No activity matches these filters.')).toBeInTheDocument();
-    await user.click(screen.getByRole('combobox', { name: 'Publisher version' }));
+    await user.click(screen.getByRole('combobox', { name: 'Publisher versions' }));
     await user.click(screen.getByRole('option', { name: 'All versions' }));
     expect(screen.getByRole('link', { name: 'Snapshot 8 evaluated' })).toBeInTheDocument();
     expect(screen.queryByText('Snapshot 7 evaluated')).not.toBeInTheDocument();
@@ -797,7 +958,7 @@ describe('agent registry preview', () => {
     expect(screen.getByTestId('agent-evaluation-query-filter')).toHaveTextContent(
       "tags.`mlflow.agent.snapshot_id` = '7'",
     );
-    expect(screen.getByTestId('agent-evaluation-query-filter')).toHaveTextContent(
+    expect(screen.getByTestId('agent-evaluation-query-filter')).not.toHaveTextContent(
       "tags.`mlflow.agent.environment` = 'prod'",
     );
   });
@@ -818,7 +979,7 @@ describe('agent registry preview', () => {
     expect(props?.baseFilter).not.toContain(' IN ');
     expect(props?.runFilter?.(run('dev'))).toBe(true);
     expect(props?.runFilter?.(run('prod'))).toBe(true);
-    expect(props?.runFilter?.(run('staging'))).toBe(false);
+    expect(props?.runFilter?.(run('staging'))).toBe(true);
     expect(props?.runFilter?.(run('prod', '7'))).toBe(false);
   });
 
@@ -901,7 +1062,7 @@ describe('agent registry preview', () => {
     renderPage('/agents/support-agent/endpoints');
     await user.click(screen.getByRole('tab', { name: 'A2A card' }));
     const rendered = screen.getByRole('region', { name: 'Rendered A2A card' });
-    for (const name of ['Metadata', 'Capabilities', 'Skills', 'Security & authentication']) {
+    for (const name of ['Connection & identity', 'Capabilities', 'Skills', 'Security & authentication']) {
       expect(within(rendered).getByRole('heading', { name })).toBeInTheDocument();
     }
     expect(within(rendered).getByText('Look up order status and delivery details.')).toBeInTheDocument();
@@ -963,7 +1124,8 @@ describe('agent registry preview', () => {
     expect(copyToClipboard).toHaveBeenLastCalledWith(
       expect.stringContaining('agent="https://agents.example.com/support"'),
     );
-    await user.click(screen.getByRole('row', { name: /^staging A2A/ }));
+    await user.click(screen.getByRole('combobox', { name: 'Access endpoint' }));
+    await user.click(screen.getByRole('option', { name: 'staging · A2A' }));
     expect(document.body).toHaveTextContent('agent="https://staging.agents.example.com/support"');
     expect(document.body).not.toHaveTextContent('agent="https://agents.example.com/support"');
   });
@@ -1019,7 +1181,8 @@ describe('agent registry preview', () => {
         ]}
       />,
     );
-    await user.click(screen.getByRole('row', { name: /^staging A2A/ }));
+    await user.click(screen.getByRole('combobox', { name: 'Access endpoint' }));
+    await user.click(screen.getByRole('option', { name: 'staging · A2A' }));
     await user.click(screen.getByRole('link', { name: 'Refund endpoint' }));
     expect(screen.getByRole('radio', { name: 'Claude Code' })).toBeInTheDocument();
     expect(screen.queryByText(/This agent has no access endpoint/)).not.toBeInTheDocument();
@@ -1047,7 +1210,8 @@ describe('agent registry preview', () => {
       renderPage('/agents/support-agent/endpoints');
       await user.hover(screen.getByRole('button', { name: 'Sync is more than 24 hours old' }));
       expect(await screen.findByRole('tooltip')).toHaveTextContent('The latest sync failed');
-      await user.click(screen.getByRole('row', { name: /^staging A2A/ }));
+      await user.click(screen.getByRole('combobox', { name: 'Access endpoint' }));
+      await user.click(screen.getByRole('option', { name: 'staging · A2A' }));
       expect(screen.queryByRole('button', { name: 'Sync is more than 24 hours old' })).not.toBeInTheDocument();
     } finally {
       dateNow.mockRestore();
@@ -1061,7 +1225,8 @@ describe('agent registry preview', () => {
     expect(screen.queryByRole('tab', { name: 'Overview' })).not.toBeInTheDocument();
     expect(screen.getByText('Connect to this endpoint')).toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'Capabilities' }));
-    await user.click(screen.getByRole('row', { name: /^staging A2A/ }));
+    await user.click(screen.getByRole('combobox', { name: 'Access endpoint' }));
+    await user.click(screen.getByRole('option', { name: 'staging · A2A' }));
     expect(screen.getByRole('tab', { name: 'Connect' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.queryByText(/The A2A card could not be fetched/)).not.toBeInTheDocument();
     expect(screen.getByText('https://staging.agents.example.com/support')).toBeInTheDocument();
@@ -1096,13 +1261,14 @@ describe('agent registry preview', () => {
     );
   });
 
-  it('filters related agents by relationship and text', async () => {
+  it('searches related agents while keeping relationships in the table column', async () => {
     const user = userEvent.setup();
     renderPage('/agents/support-agent/related');
-    await user.click(screen.getByRole('combobox', { name: 'Relationship' }));
-    await user.click(screen.getByRole('option', { name: 'Declared dependency' }));
+    expect(screen.queryByRole('combobox', { name: 'Relationship' })).not.toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Relationship' })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: /Declared dependency.*Observed outbound call/ })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Refund agent' })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'View supporting traces' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'View supporting traces' })).toBeInTheDocument();
     await user.type(screen.getByPlaceholderText('Search related agents'), 'missing');
     expect(screen.getByText('No related agents match these filters.')).toBeInTheDocument();
     await user.clear(screen.getByPlaceholderText('Search related agents'));

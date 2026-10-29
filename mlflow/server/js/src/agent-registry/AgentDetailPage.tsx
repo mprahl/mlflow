@@ -37,14 +37,15 @@ import { AgentJourneyOverview } from './AgentJourneyOverview';
 import { getAgentSectionLabel } from './AgentNavConfig';
 import { AgentDashboard } from './AgentDashboard';
 import { AgentTracingSetup } from './AgentTracingSetup';
-import { AgentEvaluationRunsPage, AgentEvaluationRunsTable } from './AgentActivityPages';
+import { AgentEvaluationRunsPage, AgentEvaluationRunsTable, EvaluationFilter } from './AgentActivityPages';
 import { AgentLiveTracesPage, AgentSnapshotTraces } from './AgentLiveTracesPage';
 import { AgentAssetsTable } from './AgentAssetsTable';
 import { AgentEndpointConnection } from './AgentEndpointConnection';
 import { AgentCardView } from './AgentCardView';
 import { AgentCapabilities } from './AgentCapabilities';
 import { getSnapshotAssetChanges } from './assetChanges';
-import { AgentInvestigationDrawer, InvestigationButton } from './AgentInvestigations';
+import { SnapshotPerformance, SnapshotEvaluationStatistics, SnapshotTimeline } from './AgentSnapshotAnalytics';
+import { AgentOverview } from './AgentOverview';
 
 const assetSections = ['assets', 'prompts', 'tools', 'skills', 'plugins', 'mcp-servers', 'models'];
 
@@ -120,14 +121,9 @@ const SnapshotDetails = ({ snapshot, agent }: { snapshot: AgentSnapshot; agent: 
         <Typography.Title level={3} withoutMargins>
           Viewing snapshot #{snapshot.id}
         </Typography.Title>
-        <div css={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm }}>
-          <InvestigationButton mode="change" snapshotId={snapshot.id}>
-            Investigate change
-          </InvestigationButton>
-          <Link componentId="mlflow.agent_registry.snapshot.dashboard" to={scopedPath('dashboard')}>
-            View dashboard
-          </Link>
-        </div>
+        <Link componentId="mlflow.agent_registry.snapshot.dashboard" to={scopedPath('dashboard')}>
+          View dashboard
+        </Link>
       </div>
       <Panel title="Details">
         <div
@@ -183,26 +179,26 @@ const SnapshotDetails = ({ snapshot, agent }: { snapshot: AgentSnapshot; agent: 
         </Tabs.Content>
         <Tabs.Content value="traces">
           <Panel
-            title="Recent traces"
+            title="Snapshot performance"
             action={
               <Link componentId="mlflow.agent_registry.snapshot.all_traces" to={scopedPath('traces')}>
                 View all traces
               </Link>
             }
           >
-            <AgentSnapshotTraces agentId={agent.id} snapshotId={snapshot.id} environment={environment} />
+            <SnapshotPerformance agent={agent} snapshot={snapshot} />
           </Panel>
         </Tabs.Content>
         <Tabs.Content value="evaluations">
           <Panel
-            title="Recent evaluation runs"
+            title="Evaluation statistics"
             action={
               <Link componentId="mlflow.agent_registry.snapshot.all_evaluations" to={scopedPath('evaluation-runs')}>
                 View all evaluations
               </Link>
             }
           >
-            <AgentEvaluationRunsTable agent={agent} evaluations={evaluations} compact />
+            <SnapshotEvaluationStatistics agent={agent} snapshot={snapshot} />
           </Panel>
         </Tabs.Content>
       </Tabs.Root>
@@ -246,18 +242,13 @@ const SnapshotCompare = ({
     <Panel
       title={`Compare snapshot #${baseline.id} with #${candidate.id}`}
       action={
-        <div css={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm }}>
-          <InvestigationButton mode="change" baselineId={baseline.id} snapshotId={candidate.id}>
-            Investigate behavior
-          </InvestigationButton>
-          <Button
-            componentId="mlflow.agent_registry.snapshot.switch_sides"
-            aria-label="Switch sides"
-            title="Switch sides"
-            icon={<ExpandMoreIcon css={{ transform: 'rotate(90deg)' }} />}
-            onClick={onSwitchSides}
-          />
-        </div>
+        <Button
+          componentId="mlflow.agent_registry.snapshot.switch_sides"
+          aria-label="Switch sides"
+          title="Switch sides"
+          icon={<ExpandMoreIcon css={{ transform: 'rotate(90deg)' }} />}
+          onClick={onSwitchSides}
+        />
       }
     >
       <Table scrollable>
@@ -316,26 +307,53 @@ const SnapshotsSection = ({ agent }: { agent: Agent }) => {
   const { theme } = useDesignSystemTheme();
   const [searchParams, setSearchParams] = useSearchParams();
   const [comparisonId, setComparisonId] = useState<number | null>(null);
+  const timeline = searchParams.get('view') === 'timeline';
+  const setView = (view: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (view === 'timeline') next.set('view', view);
+    else next.delete('view');
+    setSearchParams(next);
+  };
+  const [search, setSearch] = useState('');
+  const [versions, setVersions] = useState<string[]>(() =>
+    (searchParams.get('version') ?? '').split(',').filter((value) => value && value !== 'all'),
+  );
+  const [harnesses, setHarnesses] = useState<string[]>([]);
+  const visibleSnapshots = agent.snapshots.filter(
+    (snapshot) =>
+      (!versions.length || versions.includes(snapshot.publisherVersion)) &&
+      (!harnesses.length || harnesses.includes(snapshot.harness)) &&
+      `Snapshot #${snapshot.id} ${snapshot.publisherVersion} ${snapshot.source} ${snapshot.harness} ${snapshot.assets.map((asset) => asset.name).join(' ')}`
+        .toLowerCase()
+        .includes(search.trim().toLowerCase()),
+  );
   const selectedId = Number(searchParams.get('snapshot')) || agent.snapshots[0]?.id;
-  const selected = agent.snapshots.find((snapshot) => snapshot.id === selectedId) ?? agent.snapshots[0];
-  const comparison = agent.snapshots.find((snapshot) => snapshot.id === comparisonId);
+  const selected = visibleSnapshots.find((snapshot) => snapshot.id === selectedId) ?? visibleSnapshots[0];
+  const comparison = visibleSnapshots.find((snapshot) => snapshot.id === comparisonId);
   const selectSnapshot = (id: number) => {
+    if (!selected) return;
     const next = new URLSearchParams(searchParams);
     next.set('snapshot', String(id));
     setSearchParams(next);
     if (id === comparisonId) setComparisonId(selected.id);
   };
-  if (!selected) return <Typography.Text>No snapshots have been registered.</Typography.Text>;
+  if (!agent.snapshots.length) return <Typography.Text>No snapshots have been registered.</Typography.Text>;
   return (
     <RegistryDetailLayout
       list={
         <>
           <SegmentedControlGroup
             name="agent-snapshot-view"
-            value={comparison ? 'compare' : 'preview'}
+            value={timeline ? 'timeline' : comparison ? 'compare' : 'preview'}
             componentId="mlflow.agent_registry.snapshot.view"
           >
-            <SegmentedControlButton value="preview" onClick={() => setComparisonId(null)}>
+            <SegmentedControlButton
+              value="preview"
+              onClick={() => {
+                setComparisonId(null);
+                setView('preview');
+              }}
+            >
               <span css={{ display: 'flex', alignItems: 'center', gap: theme.spacing.xs }}>
                 <ZoomMarqueeSelection />
                 Preview
@@ -343,25 +361,82 @@ const SnapshotsSection = ({ agent }: { agent: Agent }) => {
             </SegmentedControlButton>
             <SegmentedControlButton
               value="compare"
-              disabled={agent.snapshots.length < 2}
-              onClick={() =>
-                setComparisonId(agent.snapshots.find((snapshot) => snapshot.id !== selected.id)?.id ?? null)
-              }
+              disabled={visibleSnapshots.length < 2}
+              onClick={() => {
+                setView('compare');
+                setComparisonId(visibleSnapshots.find((snapshot) => snapshot.id !== selected?.id)?.id ?? null);
+              }}
             >
               <span css={{ display: 'flex', alignItems: 'center', gap: theme.spacing.xs }}>
                 <ColumnsIcon />
                 Compare
               </span>
             </SegmentedControlButton>
+            <SegmentedControlButton
+              value="timeline"
+              onClick={() => {
+                setComparisonId(null);
+                setView('timeline');
+              }}
+            >
+              Timeline
+            </SegmentedControlButton>
           </SegmentedControlGroup>
+          <TableFilterInput
+            componentId="mlflow.agent_registry.snapshots.search"
+            placeholder="Search snapshots"
+            ignoreFilterMediaSizing
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setComparisonId(null);
+            }}
+            css={{ width: '100%' }}
+          />
+          <div css={{ display: 'flex', flexWrap: 'wrap', gap: theme.spacing.sm }}>
+            <EvaluationFilter
+              componentId="mlflow.agent_registry.snapshots.versions"
+              label="Publisher versions"
+              allLabel="All versions"
+              options={Array.from(new Set(agent.snapshots.map((snapshot) => snapshot.publisherVersion))).map(
+                (version) => ({
+                  value: version,
+                  label: `Version ${version}`,
+                }),
+              )}
+              selected={versions}
+              onChange={(values) => {
+                setVersions(values);
+                setComparisonId(null);
+              }}
+            />
+            <EvaluationFilter
+              componentId="mlflow.agent_registry.snapshots.harnesses"
+              label="Harnesses"
+              allLabel="All harnesses"
+              options={Array.from(new Set(agent.snapshots.map((snapshot) => snapshot.harness))).map((harness) => ({
+                value: harness,
+                label: harness,
+              }))}
+              selected={harnesses}
+              onChange={(values) => {
+                setHarnesses(values);
+                setComparisonId(null);
+              }}
+            />
+          </div>
           <RegistryVersionList
-            versions={agent.snapshots}
+            versions={visibleSnapshots}
             getVersionKey={(snapshot) => String(snapshot.id)}
-            selectedKey={String(selected.id)}
+            selectedKey={selected ? String(selected.id) : undefined}
             onSelect={(id) => selectSnapshot(Number(id))}
             header="Snapshots"
             componentId="mlflow.agent_registry.snapshots"
-            emptyState={<Typography.Text color="secondary">No snapshots have been registered.</Typography.Text>}
+            emptyState={
+              <div css={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 120 }}>
+                <Typography.Text color="secondary">No matching snapshots.</Typography.Text>
+              </div>
+            }
             renderVersion={(snapshot) => {
               const changes = getSnapshotAssetChanges(agent, snapshot);
               return (
@@ -382,7 +457,7 @@ const SnapshotsSection = ({ agent }: { agent: Agent }) => {
               );
             }}
             compareMode={
-              comparison
+              comparison && selected
                 ? {
                     comparedKey: String(comparison.id),
                     renderControls: (id, { isSelected, isCompared }) => (
@@ -402,7 +477,13 @@ const SnapshotsSection = ({ agent }: { agent: Agent }) => {
         </>
       }
     >
-      {comparison ? (
+      {timeline ? (
+        <SnapshotTimeline agent={agent} snapshotIds={visibleSnapshots.map((item) => item.id)} />
+      ) : !selected ? (
+        <div css={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 240 }}>
+          <Typography.Text color="secondary">No snapshots match these filters.</Typography.Text>
+        </div>
+      ) : comparison ? (
         <SnapshotCompare
           baseline={selected}
           candidate={comparison}
@@ -535,67 +616,51 @@ const EndpointDetail = ({ endpoint, agentId }: { endpoint: AccessEndpoint; agent
 
 const EndpointsSection = ({ agent }: { agent: Agent }) => {
   const { theme } = useDesignSystemTheme();
-  const [selectedName, setSelectedName] = useState(agent.endpoints[0]?.name);
-  const selected = agent.endpoints.find((endpoint) => endpoint.name === selectedName);
+  const [params, setParams] = useSearchParams();
+  const selected = agent.endpoints.find((endpoint) => endpoint.name === params.get('endpoint')) ?? agent.endpoints[0];
   return (
-    <RegistryDetailLayout
-      list={
-        <RegistryVersionList
-          versions={agent.endpoints}
-          getVersionKey={(endpoint) => endpoint.name}
-          selectedKey={selectedName}
-          onSelect={setSelectedName}
-          header="Access endpoints"
-          componentId="mlflow.agent_registry.endpoints"
-          emptyState={<Typography.Text color="secondary">No access endpoints.</Typography.Text>}
-          renderVersion={(endpoint) => (
-            <div css={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.xs, minWidth: 0 }}>
-              <div css={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
-                <Typography.Text bold>{endpoint.name}</Typography.Text>
-                <Tag componentId="mlflow.agent_registry.endpoint.protocol">{endpoint.protocol}</Tag>
-              </div>
-              <Typography.Text size="sm" color="secondary">
-                Version {endpoint.advertisedVersion}
-              </Typography.Text>
-              <Typography.Text size="sm" color="secondary">
-                {endpoint.syncStatus === 'failed'
-                  ? 'Sync failed'
-                  : endpoint.syncStatus === 'synced'
-                    ? 'Synced'
-                    : 'Manually registered'}
-              </Typography.Text>
-              {endpoint.lastSynced && (
-                <Typography.Text size="sm" color="secondary">
-                  {formatDate(endpoint.lastSynced)}
-                </Typography.Text>
-              )}
-            </div>
-          )}
-        />
-      }
-    >
-      {selected ? (
-        <EndpointDetail key={selected.name} endpoint={selected} agentId={agent.id} />
-      ) : (
-        <Typography.Text color="secondary">
-          This agent has no access endpoint. Its snapshots and traces remain available.
-        </Typography.Text>
+    <div css={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, gap: theme.spacing.md }}>
+      {selected && (
+        <SimpleSelect
+          id="agent-access-endpoint"
+          componentId="mlflow.agent_registry.endpoints.select"
+          aria-label="Access endpoint"
+          value={selected.name}
+          css={{ width: 360, maxWidth: '100%' }}
+          onChange={(event) => {
+            const next = new URLSearchParams(params);
+            next.set('endpoint', event.target.value);
+            setParams(next);
+          }}
+        >
+          {agent.endpoints.map((endpoint) => (
+            <SimpleSelectOption key={endpoint.name} value={endpoint.name}>
+              {endpoint.name} · {endpoint.protocol}
+            </SimpleSelectOption>
+          ))}
+        </SimpleSelect>
       )}
-    </RegistryDetailLayout>
+      <div css={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+        {selected ? (
+          <EndpointDetail key={selected.name} endpoint={selected} agentId={agent.id} />
+        ) : (
+          <Typography.Text color="secondary">
+            This agent has no access endpoint. Its snapshots and traces remain available.
+          </Typography.Text>
+        )}
+      </div>
+    </div>
   );
 };
 
 const RelatedAgentsSection = ({ agent, environment }: { agent: Agent; environment: string }) => {
   const { theme } = useDesignSystemTheme();
   const [search, setSearch] = useState('');
-  const [relationship, setRelationship] = useState('all');
   const rows = Array.from(new Set(agent.related.map((related) => related.agentId)))
     .map((agentId) => ({
       agentId,
       agent: getAgent(agentId),
-      relationships: agent.related.filter(
-        (related) => related.agentId === agentId && (relationship === 'all' || related.relationship === relationship),
-      ),
+      relationships: agent.related.filter((related) => related.agentId === agentId),
     }))
     .filter(
       (row) =>
@@ -615,18 +680,6 @@ const RelatedAgentsSection = ({ agent, environment }: { agent: Agent; environmen
           onChange={(event) => setSearch(event.target.value)}
           css={{ width: 270 }}
         />
-        <SimpleSelect
-          componentId="mlflow.agent_registry.related.relationship_filter"
-          id="mlflow.agent_registry.related.relationship_filter"
-          aria-label="Relationship"
-          value={relationship}
-          onChange={(event) => setRelationship(event.target.value)}
-          css={{ width: 230 }}
-        >
-          <SimpleSelectOption value="all">All relationships</SimpleSelectOption>
-          <SimpleSelectOption value="Declared dependency">Declared dependency</SimpleSelectOption>
-          <SimpleSelectOption value="Observed outbound call">Observed outbound call</SimpleSelectOption>
-        </SimpleSelect>
       </TableFilterLayout>
       <Table
         scrollable
@@ -732,6 +785,12 @@ const AgentDetailPage = () => {
     setSearchParams(next);
   };
   useEffect(() => {
+    if (section === 'dashboard' && searchParams.get('dashboardTab') === 'timeline' && agent) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('dashboardTab');
+      next.set('view', 'timeline');
+      navigate(`${agentPath(agent.id, 'snapshots')}?${next}`, { replace: true });
+    }
     if (section === 'sessions' && agent) {
       const next = new URLSearchParams(searchParams);
       next.set('groupBy', 'session');
@@ -749,8 +808,9 @@ const AgentDetailPage = () => {
     );
   }
   if (section === 'sessions') return null;
-  const isAssetSection = assetSections.includes(section);
-  const assetTab = section === 'assets' ? (searchParams.get('assetTab') ?? 'assets') : section;
+  const isAssetSection = assetSections.includes(section) || section === 'related';
+  const assetTab =
+    section === 'assets' ? (searchParams.get('type') ?? searchParams.get('assetTab') ?? 'assets') : section;
   return (
     <div
       css={{
@@ -789,17 +849,17 @@ const AgentDetailPage = () => {
             css={{
               flex: 1,
               minHeight: 0,
-              overflowY: ['snapshots', 'endpoints'].includes(section) ? 'hidden' : 'auto',
+              display: section === 'overview' ? 'flex' : undefined,
+              flexDirection: 'column',
+              overflowY: ['overview', 'snapshots', 'endpoints'].includes(section) ? 'hidden' : 'auto',
               paddingRight: theme.spacing.sm,
             }}
           >
-            {section === 'overview' && (
-              <AgentJourneyOverview agent={agent} environment={environment} onEnvironmentChange={setEnvironment} />
-            )}
+            {section === 'overview' && <AgentOverview agent={agent} />}
             {section === 'dashboard' && (
               <AgentDashboard agent={agent} environment={environment} onEnvironmentChange={setEnvironment} />
             )}
-            {section === 'snapshots' && <SnapshotsSection agent={agent} />}
+            {section === 'snapshots' && <SnapshotsSection key={agent.id} agent={agent} />}
             {section === 'traces' &&
               (agent.traces.length ? (
                 <AgentLiveTracesPage
@@ -827,26 +887,29 @@ const AgentDetailPage = () => {
             )}
             {isAssetSection && (
               <div css={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: theme.spacing.md, minWidth: 0 }}>
-                <Tabs.Root
-                  componentId="mlflow.agent_registry.assets.tabs"
-                  css={{ minWidth: 0 }}
+                <SimpleSelect
+                  componentId="mlflow.agent_registry.assets.type"
+                  id="mlflow.agent_registry.assets.type"
+                  aria-label="Type"
                   value={assetTab}
-                  valueHasNoPii
-                  onValueChange={(value) => navigate(`${agentPath(agent.id, 'assets', environment)}&assetTab=${value}`)}
+                  css={{ width: 220, maxWidth: '100%' }}
+                  onChange={(event) =>
+                    navigate(`${agentPath(agent.id, 'assets', environment)}&type=${event.target.value}`)
+                  }
                 >
-                  <Tabs.List css={{ overflowX: 'auto' }}>
-                    <Tabs.Trigger value="assets">All</Tabs.Trigger>
-                    <Tabs.Trigger value="prompts">Prompts</Tabs.Trigger>
-                    <Tabs.Trigger value="tools">Tools</Tabs.Trigger>
-                    <Tabs.Trigger value="skills">Skills</Tabs.Trigger>
-                    <Tabs.Trigger value="plugins">Agent plugins</Tabs.Trigger>
-                    <Tabs.Trigger value="mcp-servers">MCP servers</Tabs.Trigger>
-                    <Tabs.Trigger value="models">Models</Tabs.Trigger>
-                  </Tabs.List>
-                </Tabs.Root>
-                <AgentAssetsTable agent={agent} section={assetTab} />
-                {['tools', 'mcp-servers'].includes(assetTab) && (
-                  <InvestigationButton mode="dependencies">Inspect dependency failures</InvestigationButton>
+                  <SimpleSelectOption value="assets">All asset types</SimpleSelectOption>
+                  <SimpleSelectOption value="prompts">Prompts</SimpleSelectOption>
+                  <SimpleSelectOption value="tools">Tools</SimpleSelectOption>
+                  <SimpleSelectOption value="skills">Skills</SimpleSelectOption>
+                  <SimpleSelectOption value="plugins">Agent plugins</SimpleSelectOption>
+                  <SimpleSelectOption value="mcp-servers">MCP servers</SimpleSelectOption>
+                  <SimpleSelectOption value="models">Models</SimpleSelectOption>
+                  <SimpleSelectOption value="related">Related agents</SimpleSelectOption>
+                </SimpleSelect>
+                {assetTab === 'related' ? (
+                  <RelatedAgentsSection key={agent.id} agent={agent} environment={environment} />
+                ) : (
+                  <AgentAssetsTable agent={agent} section={assetTab} />
                 )}
                 {assetTab === 'tools' && (
                   <Panel title="Tools observed in traces">
@@ -877,11 +940,9 @@ const AgentDetailPage = () => {
               </div>
             )}
             {section === 'endpoints' && <EndpointsSection key={agent.id} agent={agent} />}
-            {section === 'related' && <RelatedAgentsSection key={agent.id} agent={agent} environment={environment} />}
           </div>
         </ExperimentPageMainContent>
       </div>
-      <AgentInvestigationDrawer agent={agent} environment={environment} />
     </div>
   );
 };

@@ -26,6 +26,7 @@ import {
   DEFAULT_CHART_CONTENT_HEIGHT,
 } from './OverviewChartComponents';
 import { useChartColors, useLegendHighlight, getLineDotStyle } from '../utils/chartUtils';
+import { useSnapshotChangeMarkers } from './SnapshotChangeMarkers';
 
 // The new eval runs UI marks pricing-table costs as estimated (≈ prefix and a footnote).
 const formatChartCost = (cost: number): string =>
@@ -44,6 +45,7 @@ export const TraceCostOverTimeChart: React.FC = () => {
 
   // Fetch and process cost over time chart data
   const { chartData, dimensionValues, totalCost, isLoading, error, hasData } = useTraceCostOverTimeChartData(dimension);
+  const snapshotMarkers = useSnapshotChangeMarkers(chartData);
 
   // Item selection labels depend on dimension
   const selectionLabels = useMemo(
@@ -134,6 +136,7 @@ export const TraceCostOverTimeChart: React.FC = () => {
         {hasData && displayedItems.length > 0 ? (
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
+              {snapshotMarkers}
               <XAxis dataKey="name" {...xAxisProps} />
               <YAxis {...yAxisProps} />
               <Tooltip

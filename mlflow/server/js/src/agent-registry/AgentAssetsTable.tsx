@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
+  CursorPagination,
   DialogCombobox,
   DialogComboboxContent,
   DialogComboboxOptionList,
@@ -128,17 +129,19 @@ export const AgentAssetsTable = ({
   agent,
   section,
   snapshotId,
+  pageSize,
 }: {
   agent: Agent;
   section: string;
   snapshotId?: number;
+  pageSize?: number;
 }) => {
   const { theme } = useDesignSystemTheme();
   const [search, setSearch] = useState('');
   const [snapshotIds, setSnapshotIds] = useState<string[]>([]);
   const [agentVersions, setAgentVersions] = useState<string[]>([]);
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [timeRange, setTimeRange] = useState<AgentTimeRange>('Last 30 days');
+  const [page, setPage] = useState(0);
   const now = Date.now();
   const cutoff = now - (timeRange === 'Last 7 days' ? 7 : 30) * 24 * 60 * 60 * 1000;
   const rows = useMemo(() => getAssetUsage(agent), [agent]);
@@ -169,21 +172,37 @@ export const AgentAssetsTable = ({
     })
     .sort(
       (left, right) =>
-        (sortDirection === 'desc' ? -1 : 1) * left.snapshots[0].createdAt.localeCompare(right.snapshots[0].createdAt) ||
-        left.asset.name.localeCompare(right.asset.name),
+        assetKindLabels[left.asset.kind].localeCompare(assetKindLabels[right.asset.kind]) ||
+        left.asset.name.localeCompare(right.asset.name) ||
+        right.asset.version.localeCompare(left.asset.version, undefined, { numeric: true }),
     );
-  const toggle = (current: string[], value: string, update: (values: string[]) => void) =>
+  const pageIndex = pageSize ? Math.min(page, Math.max(0, Math.ceil(visibleRows.length / pageSize) - 1)) : 0;
+  const pageRows = pageSize ? visibleRows.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize) : visibleRows;
+  const toggle = (current: string[], value: string, update: (values: string[]) => void) => {
     update(current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
+    setPage(0);
+  };
 
   return (
     <div css={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.sm, minWidth: 0 }}>
       <TableFilterLayout css={{ width: '100%', justifyContent: 'flex-start', flexWrap: 'wrap', gap: theme.spacing.sm }}>
-        {snapshotId === undefined && <TimeSelector value={timeRange} onChange={setTimeRange} />}
+        {snapshotId === undefined && (
+          <TimeSelector
+            value={timeRange}
+            onChange={(value) => {
+              setTimeRange(value);
+              setPage(0);
+            }}
+          />
+        )}
         <TableFilterInput
           componentId="mlflow.agent_registry.assets.search"
           placeholder={`Search ${section === 'assets' ? 'AI assets' : section}`}
           value={search}
-          onChange={(event) => setSearch(event.target.value)}
+          onChange={(event) => {
+            setSearch(event.target.value);
+            setPage(0);
+          }}
           css={{ width: 260 }}
         />
         {snapshotId === undefined && (
@@ -210,6 +229,31 @@ export const AgentAssetsTable = ({
       </TableFilterLayout>
       <Table
         scrollable
+        pagination={
+          pageSize ? (
+            <div
+              css={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: theme.spacing.sm,
+              }}
+            >
+              <Typography.Text color="secondary" size="sm">
+                {visibleRows.length ? pageIndex * pageSize + 1 : 0}-
+                {Math.min((pageIndex + 1) * pageSize, visibleRows.length)} of {visibleRows.length} assets
+              </Typography.Text>
+              <CursorPagination
+                componentId="mlflow.agent_registry.assets.pagination"
+                hasPreviousPage={pageIndex > 0}
+                hasNextPage={(pageIndex + 1) * pageSize < visibleRows.length}
+                onPreviousPage={() => setPage(pageIndex - 1)}
+                onNextPage={() => setPage(pageIndex + 1)}
+              />
+            </div>
+          ) : undefined
+        }
         css={{
           minHeight: visibleRows.length ? undefined : 240,
           '& [role=row]': { minWidth: snapshotId !== undefined ? 480 : section === 'assets' ? 680 : 600 },
@@ -244,16 +288,9 @@ export const AgentAssetsTable = ({
               </TableHeader>
             </>
           )}
-          <TableHeader
-            componentId="mlflow.agent_registry.assets.header"
-            sortable
-            sortDirection={sortDirection}
-            onToggleSort={() => setSortDirection(sortDirection === 'desc' ? 'asc' : 'desc')}
-          >
-            Last recorded
-          </TableHeader>
+          <TableHeader componentId="mlflow.agent_registry.assets.header">Last recorded</TableHeader>
         </TableRow>
-        {visibleRows.map((row) => {
+        {pageRows.map((row) => {
           const matchingSnapshots = row.snapshots;
           const latestSnapshot = matchingSnapshots[0];
           return (

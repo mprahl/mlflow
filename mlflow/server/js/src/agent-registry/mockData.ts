@@ -37,6 +37,7 @@ export type AccessEndpoint = {
 };
 
 export type AgentEvent = {
+  instanceId?: string;
   id: string;
   at: string;
   title: string;
@@ -109,6 +110,28 @@ const supportAssets7: AgentAsset[] = [
   { kind: 'model', name: 'GPT 6.1 Sol', version: 'provider model' },
 ];
 
+const supportAssets8: AgentAsset[] = [
+  { kind: 'prompt', name: 'support-system', version: '4', href: '/prompts/support-system?promptVersion=4' },
+  { kind: 'skill', name: 'refund-policy', version: '2', href: '/skills/refund-policy?version=2' },
+  {
+    kind: 'mcp',
+    name: 'order-lookup',
+    version: '1.0.0',
+    href: '/mcp-registry/com.example%2Forder-lookup?version=1.0.0',
+  },
+  { kind: 'skill', name: 'incident-triage', version: '3', href: '/skills/incident-triage?version=3' },
+  { kind: 'skill', name: 'documentation-research', version: '3', href: '/skills/documentation-research?version=3' },
+  {
+    kind: 'mcp',
+    name: 'github-tools',
+    version: '2.0.0',
+    href: '/mcp-registry/com.example%2Fgithub-tools?version=2.0.0',
+  },
+  { kind: 'mcp', name: 'docs-search', version: '2.1.0', href: '/mcp-registry/com.example%2Fdocs-search?version=2.1.0' },
+  { kind: 'tool', name: 'lookup_order', version: '1' },
+  { kind: 'model', name: 'GPT 6.1 Sol', version: 'provider model' },
+];
+
 export const agents: Agent[] = [
   {
     id: 'support-agent',
@@ -118,24 +141,36 @@ export const agents: Agent[] = [
     capabilities: ['Answer order questions', 'Handle refund requests', 'Escalate complex cases'],
     snapshots: [
       {
+        id: 9,
+        publisherVersion: '2.4.0',
+        createdAt: '2026-10-27T14:00:00Z',
+        source: '8c17be4',
+        sourceUrl: 'https://github.com/mlflow/mlflow/commit/8c17be4',
+        harness: 'LangGraph 1.0',
+        assets: [
+          ...supportAssets8.map((asset) => {
+            if (asset.kind === 'skill' && asset.name === 'refund-policy') {
+              return { ...asset, version: '3', href: '/skills/refund-policy?version=3' };
+            }
+            if (asset.kind === 'mcp' && asset.name === 'order-lookup') {
+              return { ...asset, version: '1.2.0', href: '/mcp-registry/com.example%2Forder-lookup?version=1.2.0' };
+            }
+            return asset;
+          }),
+          { kind: 'tool', name: 'prepare_refund', version: '1' },
+        ],
+        quality: 91,
+        latency: 1.8,
+        cost: 0.014,
+      },
+      {
         id: 8,
         publisherVersion: '2.4.0',
         createdAt: '2026-10-21T13:08:00Z',
         source: '8c17be4',
         sourceUrl: 'https://github.com/mlflow/mlflow/commit/8c17be4',
         harness: 'LangGraph 1.0',
-        assets: [
-          { kind: 'prompt', name: 'support-system', version: '4', href: '/prompts/support-system?promptVersion=4' },
-          { kind: 'skill', name: 'refund-policy', version: '2', href: '/skills/refund-policy?version=2' },
-          {
-            kind: 'mcp',
-            name: 'order-lookup',
-            version: '1.0.0',
-            href: '/mcp-registry/com.example%2Forder-lookup?version=1.0.0',
-          },
-          { kind: 'tool', name: 'lookup_order', version: '1' },
-          { kind: 'model', name: 'GPT 6.1 Sol', version: 'provider model' },
-        ],
+        assets: supportAssets8,
         quality: 91,
         latency: 1.8,
         cost: 0.014,
@@ -363,7 +398,21 @@ export const agents: Agent[] = [
         source: 'a4e9d11',
         sourceUrl: 'https://github.com/mlflow/mlflow/commit/a4e9d11',
         harness: 'LangGraph 1.0',
-        assets: [{ kind: 'skill', name: 'refund-policy', version: '2', href: '/skills/refund-policy?version=2' }],
+        assets: [
+          { kind: 'skill', name: 'refund-policy', version: '2', href: '/skills/refund-policy?version=2' },
+          {
+            kind: 'mcp',
+            name: 'order-lookup',
+            version: '1.2.0',
+            href: '/mcp-registry/com.example%2Forder-lookup?version=1.2.0',
+          },
+          {
+            kind: 'mcp',
+            name: 'postgres-query',
+            version: '1.1.0',
+            href: '/mcp-registry/com.example%2Fpostgres-query?version=1.1.0',
+          },
+        ],
         quality: 94,
         latency: 1.1,
         cost: 0.006,
@@ -434,6 +483,19 @@ export const agents: Agent[] = [
             name: 'docs-search',
             version: '2.0.0',
             href: '/mcp-registry/com.example%2Fdocs-search?version=2.0.0',
+          },
+          {
+            kind: 'skill',
+            name: 'documentation-research',
+            version: '3',
+            href: '/skills/documentation-research?version=3',
+          },
+          { kind: 'skill', name: 'code-review', version: '3', href: '/skills/code-review?version=3' },
+          {
+            kind: 'mcp',
+            name: 'github-tools',
+            version: '2.0.0',
+            href: '/mcp-registry/com.example%2Fgithub-tools?version=2.0.0',
           },
         ],
         quality: 86,

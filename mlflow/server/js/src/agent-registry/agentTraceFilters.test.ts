@@ -7,13 +7,13 @@ import {
 } from './agentTraceFilters';
 
 describe('agent trace filters', () => {
-  it('scopes the real trace table and chart queries to an agent and environment', () => {
+  it('scopes queries to agent, snapshot and version while ignoring legacy environments', () => {
     const options = { agentId: 'support-agent', environment: 'prod', snapshotId: '7', version: '2.4.0' };
 
     expect(getAgentTraceTableFilters(options)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ key: 'mlflow.agent.id', value: 'support-agent' }),
-        expect.objectContaining({ key: 'mlflow.agent.environment', value: 'prod' }),
+        expect.objectContaining({ key: 'mlflow.agent.snapshot_id', value: '7' }),
       ]),
     );
     expect(getAgentTraceMetricFilters(options)).toContain("trace.tag.`mlflow.agent.id` = 'support-agent'");
@@ -27,12 +27,12 @@ describe('agent trace filters', () => {
     expect(filters).toEqual(["trace.tag.`mlflow.agent.id` = 'agent''o'"]);
   });
 
-  it('uses one regex filter for multiple selected environments', () => {
+  it('ignores legacy multi-environment filters', () => {
     const options = { agentId: 'support-agent', environment: 'dev,prod' };
 
-    expect(getAgentTraceTableFilters(options)).toContainEqual(
-      expect.objectContaining({ key: 'mlflow.agent.environment', operator: 'RLIKE', value: '^(dev|prod)$' }),
-    );
+    expect(getAgentTraceTableFilters(options)).toEqual([
+      expect.objectContaining({ key: 'mlflow.agent.id', value: 'support-agent' }),
+    ]);
     expect(getAgentTraceMetricFilters(options)).toEqual(["trace.tag.`mlflow.agent.id` = 'support-agent'"]);
   });
 });

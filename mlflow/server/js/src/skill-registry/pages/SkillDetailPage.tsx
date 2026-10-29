@@ -341,8 +341,24 @@ const SkillDetailPage = () => {
         onDelete={permissions.canDelete ? openDeleteSkill : undefined}
       />
       <Spacer shrinks={false} />
-      <div css={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        <div css={{ flex: '0 0 320px', display: 'flex', flexDirection: 'column' }}>
+      <div
+        css={{
+          flex: 1,
+          display: 'flex',
+          minHeight: 0,
+          overflow: 'hidden',
+          '@media (max-width: 760px)': { flexDirection: 'column' },
+        }}
+      >
+        <div
+          css={{
+            flex: '0 0 320px',
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 0,
+            '@media (max-width: 760px)': { flex: '0 0 240px' },
+          }}
+        >
           {versionsError ? (
             <Alert
               componentId="mlflow.skill_registry.detail.versions_error"
@@ -367,8 +383,10 @@ const SkillDetailPage = () => {
             display: 'flex',
             flexDirection: 'column',
             minWidth: 0,
+            minHeight: 0,
             borderLeft: `1px solid ${theme.colors.border}`,
             overflow: 'hidden',
+            '@media (max-width: 760px)': { borderLeft: 0, borderTop: `1px solid ${theme.colors.border}` },
           }}
         >
           <SkillVersionDetail

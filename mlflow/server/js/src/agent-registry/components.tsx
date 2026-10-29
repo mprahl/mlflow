@@ -1,11 +1,5 @@
 import type { ReactNode } from 'react';
 import {
-  DialogCombobox,
-  DialogComboboxContent,
-  DialogComboboxOptionList,
-  DialogComboboxOptionListCheckboxItem,
-  DialogComboboxOptionListSearch,
-  DialogComboboxTrigger,
   Table,
   TableCell,
   TableHeader,
@@ -55,72 +49,15 @@ export const Panel = ({ title, action, children }: { title: ReactNode; action?: 
   );
 };
 
-const ENVIRONMENTS = ['dev', 'staging', 'prod', 'unassigned'];
+export const getSelectedEnvironments = (_value: string): string[] => [];
 
-export const getSelectedEnvironments = (value: string) =>
-  value.split(',').filter((environment) => ENVIRONMENTS.includes(environment));
+export const matchesEnvironment = (_value: string, _environment?: string) => true;
 
-export const matchesEnvironment = (value: string, environment?: string) => {
-  const selected = getSelectedEnvironments(value);
-  return !environment || selected.length === 0 || selected.includes(environment);
-};
+export const EnvironmentFilter = (_props: { value: string; onChange: (value: string) => void }) => null;
 
-export const EnvironmentFilter = ({ value, onChange }: { value: string; onChange: (value: string) => void }) => {
-  const selected = getSelectedEnvironments(value);
-  const toggle = (environment: string) => {
-    const next = selected.includes(environment)
-      ? selected.filter((item) => item !== environment)
-      : [...selected, environment];
-    onChange(next.length === ENVIRONMENTS.length || next.length === 0 ? 'all' : next.join(','));
-  };
-  return (
-    <DialogCombobox
-      componentId="mlflow.agent_registry.environment_filter"
-      label="Environments"
-      multiSelect
-      value={selected}
-    >
-      <DialogComboboxTrigger
-        data-testid="mlflow.agent_registry.environment_filter"
-        placeholder="All environments"
-        allowClear={false}
-        css={{ maxWidth: '100%', minWidth: 0, '& button': { maxWidth: '100%', minWidth: 0 } }}
-      />
-      <DialogComboboxContent maxHeight={300}>
-        <DialogComboboxOptionList>
-          <DialogComboboxOptionListSearch>
-            {ENVIRONMENTS.map((environment) => (
-              <DialogComboboxOptionListCheckboxItem
-                key={environment}
-                value={environment}
-                checked={selected.includes(environment)}
-                onChange={() => toggle(environment)}
-              >
-                {environment[0].toUpperCase() + environment.slice(1)}
-              </DialogComboboxOptionListCheckboxItem>
-            ))}
-          </DialogComboboxOptionListSearch>
-        </DialogComboboxOptionList>
-      </DialogComboboxContent>
-    </DialogCombobox>
-  );
-};
+export const EnvironmentTag = (_props: { environment?: Environment }) => null;
 
-export const EnvironmentTag = ({ environment }: { environment?: Environment }) => (
-  <Tag componentId="mlflow.agent_registry.environment" color={environment === 'prod' ? 'lime' : 'indigo'}>
-    {environment ?? 'Agent-wide'}
-  </Tag>
-);
-
-export const Events = ({
-  events,
-  compact = false,
-  renderAction,
-}: {
-  events: AgentEvent[];
-  compact?: boolean;
-  renderAction?: (event: AgentEvent) => ReactNode;
-}) => {
+export const Events = ({ events, compact = false }: { events: AgentEvent[]; compact?: boolean }) => {
   const { theme } = useDesignSystemTheme();
   return events.length ? (
     <div>
@@ -147,8 +84,11 @@ export const Events = ({
               ) : (
                 <Typography.Text bold>{event.title}</Typography.Text>
               )}
-              <EnvironmentTag environment={event.environment} />
-              {renderAction?.(event)}
+              {event.instanceId && (
+                <Typography.Text code title="Instance ID">
+                  {event.instanceId}
+                </Typography.Text>
+              )}
             </div>
             <Typography.Text size="sm" color="secondary">
               {event.detail}

@@ -31,6 +31,15 @@ const renderDetail = (props: Partial<React.ComponentProps<typeof SkillVersionDet
 };
 
 describe('SkillVersionDetail', () => {
+  it('shows the Used by agents tab without changing the default details', async () => {
+    renderDetail({ version: createMockSkillVersion({ version: 2 }) });
+    expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('aria-selected', 'true');
+    await userEvent.click(screen.getByRole('tab', { name: 'Used by agents (0)' }));
+    expect(screen.getByText('No agent snapshots reference this version.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: 'Details' }));
+    expect(screen.getByText('skills:/@acme/code-review/2')).toBeInTheDocument();
+  });
+
   it('renders version metadata, aliases, tags, and a safe source link', () => {
     renderDetail({
       version: createMockSkillVersion({

@@ -17,6 +17,7 @@ import {
 } from './OverviewChartComponents';
 import { formatCount, useLegendHighlight, getLineDotStyle } from '../utils/chartUtils';
 import { useOverviewChartContext } from '../OverviewChartContext';
+import { useSnapshotChangeMarkers } from './SnapshotChangeMarkers';
 
 export const TraceTokenUsageChart: React.FC = () => {
   const { theme } = useDesignSystemTheme();
@@ -38,6 +39,7 @@ export const TraceTokenUsageChart: React.FC = () => {
     error,
     hasData,
   } = useTraceTokenUsageChartData();
+  const snapshotMarkers = useSnapshotChangeMarkers(chartData);
 
   const tooltipFormatter = useCallback(
     (value: number, name: string) => [formatCount(value), name] as [string, string],
@@ -79,6 +81,7 @@ export const TraceTokenUsageChart: React.FC = () => {
         {hasData ? (
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={chartData} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
+              {snapshotMarkers}
               <XAxis dataKey="name" {...xAxisProps} />
               <YAxis {...yAxisProps} />
               <Tooltip

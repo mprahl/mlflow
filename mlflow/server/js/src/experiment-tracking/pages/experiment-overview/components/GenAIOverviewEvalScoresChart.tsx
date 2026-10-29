@@ -23,6 +23,7 @@ const EVAL_RUNS_ASSESSMENT_COLOR_PALETTE = RUNS_COLOR_PALETTE.slice(0, 9);
 const getScoreDisplayName = (scoreName: string) => scoreName.replace(/\/mean$/, '');
 
 export interface GenAIOverviewEvalScoresChartProps {
+  runUrlBuilder?: (runUuid: string) => string;
   experimentId: string;
   assessmentScoreNames: string[];
   scorePoints: GenAIOverviewEvalScorePoint[];
@@ -34,6 +35,7 @@ export const GenAIOverviewEvalScoresChart = ({
   assessmentScoreNames,
   scorePoints,
   onAskAssistant,
+  runUrlBuilder,
 }: GenAIOverviewEvalScoresChartProps) => {
   const { theme } = useDesignSystemTheme();
   const intl = useIntl();
@@ -156,6 +158,10 @@ export const GenAIOverviewEvalScoresChart = ({
           onClick: () => {
             const firstPoint = chartScorePoints[interaction.selection?.startIndex ?? 0];
             if (!firstPoint) return;
+            if (runUrlBuilder) {
+              void navigate(runUrlBuilder(firstPoint.runUuid));
+              return;
+            }
             if (interaction.selection?.startIndex === interaction.selection?.endIndex) {
               void navigate(Routes.getIssueDetectionRunDetailsRoute(experimentId, firstPoint.runUuid));
               return;

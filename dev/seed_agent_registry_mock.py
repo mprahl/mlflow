@@ -5,14 +5,20 @@ from __future__ import annotations
 import argparse
 import json
 import time
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import mlflow
 from mlflow.entities import Dataset, DatasetInput, InputTag, SpanType
 from mlflow.entities.assessment import Feedback
 from mlflow.entities.assessment_source import AssessmentSource, AssessmentSourceType
 from mlflow.entities.mcp_server import MCPStatus
+from mlflow.entities.skill import RegistryIcon
+from mlflow.exceptions import MlflowException
+from mlflow.genai.skill_content.archive import package_skill_tree
+from mlflow.store.tracking.mcp_server_registry.abstract_mixin import MCPIcon
 from mlflow.tracing.client import TracingClient
 from mlflow.tracing.constant import SpanAttributeKey, TraceMetadataKey
 from mlflow.tracking import MlflowClient
@@ -23,6 +29,11 @@ AGENT_ID_TAG = "mlflow.agent.id"
 ENVIRONMENT_TAG = "mlflow.agent.environment"
 SNAPSHOT_TAG = "mlflow.agent.snapshot_id"
 VERSION_TAG = "mlflow.agent.version"
+INSTANCE_ID_KEY = "service.instance.id"
+
+
+def get_preview_instance_id(agent_id: str, environment: str, index: int) -> str:
+    return f"{agent_id.removesuffix('-agent')}-{environment}-worker-{index % 2 + 1}"
 
 
 @dataclass(frozen=True)
@@ -47,6 +58,77 @@ AGENTS = (
 )
 
 
+@dataclass(frozen=True)
+class SkillSeed:
+    name: str
+    description: str
+    icon: str
+
+
+@dataclass(frozen=True)
+class MCPServerSeed:
+    name: str
+    title: str
+    description: str
+    icon: str
+    versions: tuple[str, ...]
+
+
+SKILLS = (
+    SkillSeed(
+        "refund-policy",
+        "Check refund eligibility and explain the next steps.",
+        "https://www.paypalobjects.com/webstatic/icon/pp258.png",
+    ),
+    SkillSeed(
+        "code-review",
+        "Review pull requests for correctness, security, and missing tests.",
+        "https://github.githubassets.com/favicons/favicon.svg",
+    ),
+    SkillSeed(
+        "incident-triage",
+        "Correlate service alerts, identify likely causes, and prepare incident handoffs.",
+        "https://www.datadoghq.com/favicon.ico",
+    ),
+    SkillSeed(
+        "documentation-research",
+        "Find authoritative documentation and produce answers with source references.",
+        "https://www.python.org/static/favicon.ico",
+    ),
+)
+
+MCP_SERVERS = (
+    MCPServerSeed(
+        "com.example/order-lookup",
+        "Order lookup",
+        "Look up orders, delivery progress, and return eligibility for support agents.",
+        "https://www.paypalobjects.com/webstatic/icon/pp258.png",
+        ("1.0.0", "1.1.0", "1.2.0"),
+    ),
+    MCPServerSeed(
+        "com.example/docs-search",
+        "Documentation search",
+        "Search product documentation and return relevant passages with citations.",
+        "https://www.python.org/static/favicon.ico",
+        ("1.0.0", "2.0.0", "2.1.0"),
+    ),
+    MCPServerSeed(
+        "com.example/github-tools",
+        "GitHub tools",
+        "Inspect repositories, pull requests, issues, and workflow results.",
+        "https://github.githubassets.com/favicons/favicon.svg",
+        ("1.0.0", "1.1.0", "2.0.0"),
+    ),
+    MCPServerSeed(
+        "com.example/postgres-query",
+        "PostgreSQL query",
+        "Explore database schemas and run read-only queries for data investigations.",
+        "https://www.postgresql.org/favicon.ico",
+        ("0.9.0", "1.0.0", "1.1.0"),
+    ),
+)
+
+
 def seed_registry_assets(client: MlflowClient) -> None:
     if client.get_prompt("support-system") is None:
         client.create_prompt(
@@ -64,31 +146,96 @@ def seed_registry_assets(client: MlflowClient) -> None:
                 description=f"Preview prompt revision {version}",
             )
 
-    if not any(skill.name == "refund-policy" for skill in client.search_skills()):
-        client.create_skill(
-            name="refund-policy",
-            description="Check refund eligibility and explain the next steps.",
-        )
-        for _ in range(2):
-            client.create_skill_version(name="refund-policy", status="active")
+    for seed in SKILLS:
+        icons: list[RegistryIcon] = [{"src": seed.icon}]
+        try:
+            skill = client.get_skill(name=seed.name)
+        except MlflowException as error:
+            if error.error_code != "RESOURCE_DOES_NOT_EXIST":
+                raise
+            skill = client.create_skill(name=seed.name, description=seed.description, icons=icons)
+        if not skill.icons:
+            client.update_skill(name=seed.name, icons=icons)
+        versions = client.search_skill_versions(name=seed.name, max_results=3)
+        for revision in range(len(versions) + 1, 4):
+            steps = (
+                "Identify the relevant inputs and evidence before proceeding.",
+                "Record assumptions and cite the sources used in the response.",
+                "Summarize findings, unresolved questions, and recommended next steps.",
+            )
+            content = (
+                f"---\nname: {seed.name}\ndescription: {json.dumps(seed.description)}\n---\n\n"
+                f"# {seed.name.replace('-', ' ').title()}\n\n{seed.description}\n\n"
+                f"## Revision {revision}\n\n"
+                + "\n".join(f"- {step}" for step in steps[:revision])
+                + "\n"
+            )
+            with TemporaryDirectory(prefix="mlflow-preview-skill-") as temporary:
+                root = Path(temporary)
+                skill_dir = root / seed.name
+                skill_dir.mkdir()
+                (skill_dir / "SKILL.md").write_text(content, encoding="utf-8")
+                archive = package_skill_tree(skill_dir, root / "content.tar.gz")
+                client.create_skill_version(name=seed.name, source=str(archive), status="active")
 
-    for name, mcp_version, description in (
-        ("com.example/order-lookup", "1.0.0", "Look up an order for the support agent."),
-        ("com.example/docs-search", "2.0.0", "Search knowledge documents for the knowledge agent."),
-    ):
-        if any(server.name == name for server in client.search_mcp_servers()):
-            continue
-        client.create_mcp_server(name=name, description=description)
-        client.create_mcp_server_version(
-            server_json={
-                "name": name,
-                "version": mcp_version,
-                "title": name.replace("-", " ").title(),
-                "description": description,
-            },
-            status=MCPStatus.ACTIVE,
-            tools=[],
-        )
+    for server_seed in MCP_SERVERS:
+        server_icons: list[MCPIcon] = [{"src": server_seed.icon}]
+        try:
+            server = client.get_mcp_server(server_seed.name)
+        except MlflowException as error:
+            if error.error_code != "RESOURCE_DOES_NOT_EXIST":
+                raise
+            server = client.create_mcp_server(
+                name=server_seed.name, description=server_seed.description, icons=server_icons
+            )
+        if not server.icons:
+            client.update_mcp_server(name=server_seed.name, icons=server_icons)
+        for server_version in server_seed.versions:
+            try:
+                client.get_mcp_server_version(server_seed.name, server_version)
+            except MlflowException as error:
+                if error.error_code != "RESOURCE_DOES_NOT_EXIST":
+                    raise
+                client.create_mcp_server_version(
+                    server_json={
+                        "name": server_seed.name,
+                        "version": server_version,
+                        "title": server_seed.title,
+                        "description": (
+                            f"{server_seed.description} Preview release {server_version}."
+                        ),
+                        "icons": server_icons,
+                    },
+                    status=MCPStatus.ACTIVE,
+                    tools=[],
+                )
+
+    seed_mcp_access_endpoints(client)
+
+
+def seed_mcp_access_endpoints(client: MlflowClient) -> int:
+    created = 0
+    for seed in MCP_SERVERS:
+        existing_urls: set[str] = set()
+        page_token = None
+        while True:
+            endpoints = client.search_mcp_access_endpoints(
+                server_name=seed.name, page_token=page_token
+            )
+            existing_urls.update(endpoint.url for endpoint in endpoints)
+            if not (page_token := endpoints.token):
+                break
+        slug = seed.name.rsplit("/", 1)[-1]
+        for version in seed.versions:
+            for environment in ("prod", "staging"):
+                url = f"https://{slug}.{environment}.example.com/{version}/mcp"
+                if url not in existing_urls:
+                    client.create_mcp_access_endpoint(
+                        server_name=seed.name, url=url, server_version=version
+                    )
+                    existing_urls.add(url)
+                    created += 1
+    return created
 
 
 def seed_agent_traces(experiment_id: str, agent: AgentSeed) -> None:
@@ -112,15 +259,22 @@ def seed_agent_traces(experiment_id: str, agent: AgentSeed) -> None:
         }
         if agent.agent_id == "support-agent" and index % 2 == 0:
             tags["mlflow.agent.related_agent_id"] = "refund-agent"
+        instance_id = get_preview_instance_id(
+            agent.agent_id, environment, index // len(agent.environments)
+        )
         root = mlflow.start_span_no_context(
             name=agent.name,
             span_type=SpanType.AGENT,
             inputs={"question": question},
             tags=tags,
-            metadata={TraceMetadataKey.TRACE_SESSION: f"{agent.agent_id}-session-{index // 2 + 1}"},
+            metadata={
+                TraceMetadataKey.TRACE_SESSION: f"{agent.agent_id}-session-{index // 2 + 1}",
+                INSTANCE_ID_KEY: instance_id,
+            },
             experiment_id=experiment_id,
             start_time_ns=start_ns,
         )
+        root.set_attribute(INSTANCE_ID_KEY, instance_id)
         tool = mlflow.start_span_no_context(
             name="lookup_order" if agent.agent_id == "support-agent" else "search_context",
             span_type=SpanType.TOOL,
@@ -231,15 +385,17 @@ def seed_agent_evaluation_runs(experiment_id: str, agent: AgentSeed) -> None:
         assessments = []
         for case_index in range(2):
             start_ns = (start_ms + case_index * 2000) * 1_000_000
+            instance_id = get_preview_instance_id(agent.agent_id, environment, case_index)
             root = mlflow.start_span_no_context(
                 name=f"{agent.name} evaluation",
                 span_type=SpanType.AGENT,
                 inputs={"question": f"{agent.name} evaluation case {case_index + 1}"},
                 tags=tags,
-                metadata={TraceMetadataKey.SOURCE_RUN: run_id},
+                metadata={TraceMetadataKey.SOURCE_RUN: run_id, INSTANCE_ID_KEY: instance_id},
                 experiment_id=experiment_id,
                 start_time_ns=start_ns,
             )
+            root.set_attribute(INSTANCE_ID_KEY, instance_id)
             root.end(
                 outputs={"answer": "Preview evaluation response"},
                 end_time_ns=start_ns + 1_000_000_000,
@@ -258,8 +414,11 @@ def seed_agent_evaluation_runs(experiment_id: str, agent: AgentSeed) -> None:
 
 def repair_preview_traces(tracking_uri: str, experiment_id: str) -> int:
     client = MlflowClient(tracking_uri=tracking_uri)
+    if client.get_experiment(experiment_id).name != EXPERIMENT_NAME:
+        raise ValueError(f"Only the {EXPERIMENT_NAME} experiment can be repaired")
     tracing_client = TracingClient(tracking_uri=tracking_uri)
     agents_by_id = {agent.agent_id: agent for agent in AGENTS}
+    instance_counts: dict[tuple[str, str], int] = defaultdict(int)
     repaired = 0
     page_token = None
     while True:
@@ -275,15 +434,30 @@ def repair_preview_traces(tracking_uri: str, experiment_id: str) -> int:
                 TraceMetadataKey.TRACE_SESSION
             ) or trace.info.tags.get(TraceMetadataKey.TRACE_SESSION)
             agent = agents_by_id.get(agent_id)
-            if not (agent and session_id and session_id.startswith(f"{agent_id}-session-")):
+            if not agent:
                 continue
+            environment = trace.info.tags.get(ENVIRONMENT_TAG) or "unassigned"
+            scope = (agent.agent_id, environment)
             changed = False
-            if not trace.info.trace_metadata.get(TraceMetadataKey.TRACE_SESSION):
-                trace.info.trace_metadata[TraceMetadataKey.TRACE_SESSION] = session_id
-                tracing_client.start_trace(trace.info)
+            if not trace.info.trace_metadata.get(INSTANCE_ID_KEY):
+                trace.info.trace_metadata[INSTANCE_ID_KEY] = get_preview_instance_id(
+                    agent.agent_id, environment, instance_counts[scope]
+                )
                 changed = True
-            environment = trace.info.tags.get(ENVIRONMENT_TAG)
-            if environment in agent.environments:
+            instance_counts[scope] += 1
+            has_preview_session = bool(
+                session_id and session_id.startswith(f"{agent.agent_id}-session-")
+            )
+            if (
+                session_id
+                and has_preview_session
+                and not trace.info.trace_metadata.get(TraceMetadataKey.TRACE_SESSION)
+            ):
+                trace.info.trace_metadata[TraceMetadataKey.TRACE_SESSION] = session_id
+                changed = True
+            if changed:
+                tracing_client.start_trace(trace.info)
+            if has_preview_session and environment in agent.environments:
                 expected_tags = {
                     SNAPSHOT_TAG: agent.snapshot_for_environment(environment),
                     VERSION_TAG: agent.version,

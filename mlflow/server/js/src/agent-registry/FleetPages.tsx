@@ -20,7 +20,7 @@ import {
 import { ScrollablePageWrapper } from '../common/components/ScrollablePageWrapper';
 import { ExperimentPageMainContent } from '../experiment-tracking/pages/experiment-page-tabs/ExperimentPageMainContent';
 import { Link, useParams, useSearchParams } from '../common/utils/RoutingUtils';
-import { agentPath, EnvironmentTag } from './components';
+import { agentPath } from './components';
 import { fleets, getAgent, getFleet } from './mockData';
 import { fleetNavItems, fleetSectionPath } from './FleetNavConfig';
 import { FleetAgentFilter, getSelectedFleetMembers } from './fleetScope';
@@ -76,7 +76,6 @@ export const FleetListPage = () => {
             <TableHeader componentId="mlflow.agent_registry.fleets.table.header">Name</TableHeader>
             <TableHeader componentId="mlflow.agent_registry.fleets.table.header">Description</TableHeader>
             <TableHeader componentId="mlflow.agent_registry.fleets.table.header">Agents</TableHeader>
-            <TableHeader componentId="mlflow.agent_registry.fleets.table.header">Selected environments</TableHeader>
             <TableHeader componentId="mlflow.agent_registry.fleets.table.header">Owners</TableHeader>
           </TableRow>
           {visibleFleets.map((fleet) => (
@@ -95,17 +94,6 @@ export const FleetListPage = () => {
                 <Link componentId="mlflow.agent_registry.fleet.members_link" to={fleetSectionPath(fleet.id, 'agents')}>
                   {fleet.members.length} agents
                 </Link>
-              </TableCell>
-              <TableCell css={{ alignItems: 'center' }}>
-                <div css={{ display: 'flex', flexWrap: 'wrap', gap: theme.spacing.xs }}>
-                  {Array.from(new Set(fleet.members.map((member) => member.environment))).map((environment) =>
-                    environment ? (
-                      <EnvironmentTag key={environment} environment={environment} />
-                    ) : (
-                      <Typography.Text key="all">All environments</Typography.Text>
-                    ),
-                  )}
-                </div>
               </TableCell>
               <TableCell css={{ alignItems: 'center' }}>
                 <Typography.Text
@@ -162,7 +150,7 @@ const FleetMembersTable = ({ members }: { members: FleetMember[] }) => {
         }
       >
         <TableRow isHeader>
-          {['Name', 'Description', 'Owner', 'Selected environment', 'Access endpoint', 'Activity'].map((header) => (
+          {['Name', 'Description', 'Owner', 'Access endpoint', 'Activity'].map((header) => (
             <TableHeader key={header} componentId="mlflow.agent_registry.fleet.members.header" multiline>
               {header}
             </TableHeader>
@@ -184,9 +172,6 @@ const FleetMembersTable = ({ members }: { members: FleetMember[] }) => {
               </Typography.Text>
             </TableCell>
             <TableCell css={{ alignItems: 'center' }}>{member.agent?.owner}</TableCell>
-            <TableCell css={{ alignItems: 'center' }}>
-              {member.environment ? <EnvironmentTag environment={member.environment} /> : 'All environments'}
-            </TableCell>
             <TableCell css={{ alignItems: 'center' }}>
               {member.agent.endpoints.length ? (
                 <Link
@@ -230,7 +215,7 @@ const FleetDetailPage = () => {
   const fleet = getFleet(fleetId);
   const { theme } = useDesignSystemTheme();
   const [params, setParams] = useSearchParams();
-  const selection = params.get('agents') ?? 'all';
+  const selection = section === 'agents' ? 'all' : (params.get('agents') ?? 'all');
   const members = useMemo(() => (fleet ? getSelectedFleetMembers(fleet, selection) : []), [fleet, selection]);
   if (!fleet) {
     return (
@@ -274,23 +259,25 @@ const FleetDetailPage = () => {
         headerDescription={<Typography.Text color="secondary">{fleet.description}</Typography.Text>}
       >
         <div css={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: theme.spacing.md }}>
-          <div css={{ display: 'flex', alignItems: 'center', gap: theme.spacing.md, flexWrap: 'wrap' }}>
-            <FleetAgentFilter
-              fleet={fleet}
-              members={members}
-              onChange={(value) => {
-                const next = new URLSearchParams(params);
-                if (value === 'all') next.delete('agents');
-                else next.set('agents', value);
-                next.delete('selectedRunUuid');
-                next.delete('compareToRunUuid');
-                setParams(next);
-              }}
-            />
-            <Typography.Text color="secondary" size="sm">
-              {members.length} of {fleet.members.length} agents
-            </Typography.Text>
-          </div>
+          {section !== 'agents' && (
+            <div css={{ display: 'flex', alignItems: 'center', gap: theme.spacing.md, flexWrap: 'wrap' }}>
+              <FleetAgentFilter
+                fleet={fleet}
+                members={members}
+                onChange={(value) => {
+                  const next = new URLSearchParams(params);
+                  if (value === 'all') next.delete('agents');
+                  else next.set('agents', value);
+                  next.delete('selectedRunUuid');
+                  next.delete('compareToRunUuid');
+                  setParams(next);
+                }}
+              />
+              <Typography.Text color="secondary" size="sm">
+                {members.length} of {fleet.members.length} agents
+              </Typography.Text>
+            </div>
+          )}
           <div
             css={{
               display: 'flex',

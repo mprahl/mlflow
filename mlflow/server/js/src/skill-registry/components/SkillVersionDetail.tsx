@@ -10,6 +10,7 @@ import {
   DialogComboboxTrigger,
   InfoSmallIcon,
   Spacer,
+  Tabs,
   Tag,
   Tooltip,
   TrashIcon,
@@ -39,6 +40,7 @@ import { UseSkillInstructions } from './UseSkillInstructions';
 import { CopyButton } from '../../shared/building_blocks/CopyButton';
 import { flexRowStyles, inlineCodeStyles } from '../styles';
 import Utils from '../../common/utils/Utils';
+import { AssetUsageTabList, AssetUsedByAgents, AssetUsedByAgentsTab } from '../../agent-registry/AssetUsedByAgents';
 
 const EDITABLE_STATUS_ORDER = [SkillStatus.DRAFT, SkillStatus.ACTIVE, SkillStatus.DEPRECATED];
 
@@ -366,6 +368,11 @@ export const SkillVersionDetail = ({
 
   const aliases = aliasesForVersion(skill, version);
   const referenceUris = formatSkillReferenceUris(skill.name, skill.organization, version.version, aliases);
+  const usageAsset = {
+    kind: 'skill' as const,
+    name: skill.organization ? `@${skill.organization}/${skill.name}` : skill.name,
+    version: String(version.version),
+  };
 
   return (
     <div css={{ flex: 1, padding: theme.spacing.md, overflow: 'auto' }}>
@@ -391,143 +398,162 @@ export const SkillVersionDetail = ({
           css={{ marginBottom: theme.spacing.sm }}
         />
       )}
-      <div css={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.md }}>
-        <SkillSectionCard
-          title={
-            <FormattedMessage
-              defaultMessage="Get started"
-              description="Title of the section showing how to use a skill"
-            />
-          }
-          description={
-            <FormattedMessage
-              defaultMessage="Pull version {version} into the folder your coding agent loads skills from."
-              description="Description of the section showing how to use a skill version"
-              values={{ version: version.version }}
-            />
-          }
-        >
-          <UseSkillInstructions
-            key={version.version}
-            componentId="mlflow.skill_registry.detail.get_started"
-            skill={skill}
-            version={version.version}
-          />
-        </SkillSectionCard>
-        <SkillSectionCard
-          title={
-            <FormattedMessage defaultMessage="Details" description="Title of a skill version's metadata section" />
-          }
-        >
-          <div
-            css={{
-              display: 'grid',
-              gridTemplateColumns: '140px minmax(0, 1fr)',
-              gridAutoRows: `minmax(${theme.typography.lineHeightLg}, auto)`,
-              alignItems: 'flex-start',
-              rowGap: theme.spacing.xs,
-              columnGap: theme.spacing.sm,
-            }}
-          >
-            <MetadataLabel>
-              <FormattedMessage defaultMessage="Registered at:" description="Skill version creation timestamp label" />
-            </MetadataLabel>
-            <MetadataValue>
-              {version.creation_timestamp ? Utils.formatTimestamp(version.creation_timestamp) : '—'}
-            </MetadataValue>
-
-            <MetadataLabel>
-              <FormattedMessage defaultMessage="Status:" description="Skill version stored status label" />
-            </MetadataLabel>
-            <span css={flexRowStyles(theme)}>
-              <SkillVersionStatusEditor
-                key={`${version.version}:${version.status}`}
-                status={version.status}
-                statusUpdate={statusUpdate}
+      <Tabs.Root componentId="mlflow.skill_registry.detail.version_tabs" defaultValue="details" valueHasNoPii>
+        <AssetUsageTabList>
+          <Tabs.Trigger value="details">Details</Tabs.Trigger>
+          <AssetUsedByAgentsTab asset={usageAsset} />
+        </AssetUsageTabList>
+        <Tabs.Content value="details">
+          <div css={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.md }}>
+            <SkillSectionCard
+              title={
+                <FormattedMessage
+                  defaultMessage="Get started"
+                  description="Title of the section showing how to use a skill"
+                />
+              }
+              description={
+                <FormattedMessage
+                  defaultMessage="Pull version {version} into the folder your coding agent loads skills from."
+                  description="Description of the section showing how to use a skill version"
+                  values={{ version: version.version }}
+                />
+              }
+            >
+              <UseSkillInstructions
+                key={version.version}
+                componentId="mlflow.skill_registry.detail.get_started"
+                skill={skill}
+                version={version.version}
               />
-            </span>
-
-            {/* Without auth the server records no user, so an empty creator is hidden rather than shown as "—". */}
-            {version.created_by && (
-              <>
+            </SkillSectionCard>
+            <SkillSectionCard
+              title={
+                <FormattedMessage defaultMessage="Details" description="Title of a skill version's metadata section" />
+              }
+            >
+              <div
+                css={{
+                  display: 'grid',
+                  gridTemplateColumns: '140px minmax(0, 1fr)',
+                  gridAutoRows: `minmax(${theme.typography.lineHeightLg}, auto)`,
+                  alignItems: 'flex-start',
+                  rowGap: theme.spacing.xs,
+                  columnGap: theme.spacing.sm,
+                }}
+              >
                 <MetadataLabel>
-                  <FormattedMessage defaultMessage="Created by:" description="Skill version creator label" />
+                  <FormattedMessage
+                    defaultMessage="Registered at:"
+                    description="Skill version creation timestamp label"
+                  />
                 </MetadataLabel>
-                <MetadataValue>{version.created_by}</MetadataValue>
-              </>
-            )}
+                <MetadataValue>
+                  {version.creation_timestamp ? Utils.formatTimestamp(version.creation_timestamp) : '—'}
+                </MetadataValue>
 
-            <MetadataLabel>
-              <FormattedMessage defaultMessage="Aliases:" description="Skill version aliases label" />
-            </MetadataLabel>
-            <SkillAliases
-              aliases={aliases}
-              isLatest={skill.latest_version != null && version.version === skill.latest_version}
-              onEdit={onEditAliases}
-            />
+                <MetadataLabel>
+                  <FormattedMessage defaultMessage="Status:" description="Skill version stored status label" />
+                </MetadataLabel>
+                <span css={flexRowStyles(theme)}>
+                  <SkillVersionStatusEditor
+                    key={`${version.version}:${version.status}`}
+                    status={version.status}
+                    statusUpdate={statusUpdate}
+                  />
+                </span>
 
-            <MetadataLabel>
-              <FormattedMessage defaultMessage="Metadata:" description="Skill version tags label" />
-            </MetadataLabel>
-            <span css={flexRowStyles(theme)}>
-              <SkillTags tags={version.tags || {}} wrap />
-              {onEditMetadata && (
-                <SkillPencilButton
-                  componentId="mlflow.skill_registry.detail.version.metadata.edit"
-                  label={intl.formatMessage({
-                    defaultMessage: 'Edit version tags',
-                    description: 'Aria label for editing skill version tags',
-                  })}
-                  onClick={onEditMetadata}
+                {/* Without auth the server records no user, so an empty creator is hidden rather than shown as "—". */}
+                {version.created_by && (
+                  <>
+                    <MetadataLabel>
+                      <FormattedMessage defaultMessage="Created by:" description="Skill version creator label" />
+                    </MetadataLabel>
+                    <MetadataValue>{version.created_by}</MetadataValue>
+                  </>
+                )}
+
+                <MetadataLabel>
+                  <FormattedMessage defaultMessage="Aliases:" description="Skill version aliases label" />
+                </MetadataLabel>
+                <SkillAliases
+                  aliases={aliases}
+                  isLatest={skill.latest_version != null && version.version === skill.latest_version}
+                  onEdit={onEditAliases}
                 />
-              )}
-            </span>
 
-            <MetadataLabel>
-              <FormattedMessage defaultMessage="Source:" description="Skill version source label" />
-            </MetadataLabel>
-            <SkillSourceDetails version={version} />
+                <MetadataLabel>
+                  <FormattedMessage defaultMessage="Metadata:" description="Skill version tags label" />
+                </MetadataLabel>
+                <span css={flexRowStyles(theme)}>
+                  <SkillTags tags={version.tags || {}} wrap />
+                  {onEditMetadata && (
+                    <SkillPencilButton
+                      componentId="mlflow.skill_registry.detail.version.metadata.edit"
+                      label={intl.formatMessage({
+                        defaultMessage: 'Edit version tags',
+                        description: 'Aria label for editing skill version tags',
+                      })}
+                      onClick={onEditMetadata}
+                    />
+                  )}
+                </span>
 
-            <MetadataLabel>
-              <span css={{ display: 'inline-flex', alignItems: 'center', gap: theme.spacing.xs }}>
-                <FormattedMessage defaultMessage="Content digest:" description="Skill version content digest label" />
-                <ContentDigestInfo version={version} />
-              </span>
-            </MetadataLabel>
-            <span css={{ display: 'inline-flex', alignItems: 'center', gap: theme.spacing.xs, maxWidth: '100%' }}>
-              {version.digest ? <InlineCode>{version.digest}</InlineCode> : <MetadataValue>—</MetadataValue>}
-              {version.digest && (
-                <CopyButton
-                  componentId="mlflow.skill_registry.detail.version.digest.copy"
-                  copyText={version.digest}
-                  showLabel={false}
-                  size="small"
-                  type="tertiary"
-                  icon={<CopyIcon css={{ fontSize: theme.typography.fontSizeSm }} />}
-                  aria-label={intl.formatMessage({
-                    defaultMessage: 'Copy content digest',
-                    description: 'Aria label for copying a Skill version content digest',
-                  })}
-                />
-              )}
-            </span>
+                <MetadataLabel>
+                  <FormattedMessage defaultMessage="Source:" description="Skill version source label" />
+                </MetadataLabel>
+                <SkillSourceDetails version={version} />
 
-            <MetadataLabel>
-              <FormattedMessage
-                defaultMessage="Reference URIs:"
-                description="Pinned skills URI label for a Skill version"
-              />
-            </MetadataLabel>
-            <div css={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: theme.spacing.xs }}>
-              {referenceUris.map((referenceUri) => (
-                <InlineCode key={referenceUri}>{referenceUri}</InlineCode>
-              ))}
-            </div>
+                <MetadataLabel>
+                  <span css={{ display: 'inline-flex', alignItems: 'center', gap: theme.spacing.xs }}>
+                    <FormattedMessage
+                      defaultMessage="Content digest:"
+                      description="Skill version content digest label"
+                    />
+                    <ContentDigestInfo version={version} />
+                  </span>
+                </MetadataLabel>
+                <span css={{ display: 'inline-flex', alignItems: 'center', gap: theme.spacing.xs, maxWidth: '100%' }}>
+                  {version.digest ? <InlineCode>{version.digest}</InlineCode> : <MetadataValue>—</MetadataValue>}
+                  {version.digest && (
+                    <CopyButton
+                      componentId="mlflow.skill_registry.detail.version.digest.copy"
+                      copyText={version.digest}
+                      showLabel={false}
+                      size="small"
+                      type="tertiary"
+                      icon={<CopyIcon css={{ fontSize: theme.typography.fontSizeSm }} />}
+                      aria-label={intl.formatMessage({
+                        defaultMessage: 'Copy content digest',
+                        description: 'Aria label for copying a Skill version content digest',
+                      })}
+                    />
+                  )}
+                </span>
+
+                <MetadataLabel>
+                  <FormattedMessage
+                    defaultMessage="Reference URIs:"
+                    description="Pinned skills URI label for a Skill version"
+                  />
+                </MetadataLabel>
+                <div
+                  css={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: theme.spacing.xs }}
+                >
+                  {referenceUris.map((referenceUri) => (
+                    <InlineCode key={referenceUri}>{referenceUri}</InlineCode>
+                  ))}
+                </div>
+              </div>
+            </SkillSectionCard>
+            <SkillManifestPreview version={version} />
+            <SkillVersionFiles version={version} />
           </div>
-        </SkillSectionCard>
-        <SkillManifestPreview version={version} />
-        <SkillVersionFiles version={version} />
-      </div>
+        </Tabs.Content>
+        <Tabs.Content value="agents">
+          <AssetUsedByAgents key={`${usageAsset.name}/${usageAsset.version}`} asset={usageAsset} />
+        </Tabs.Content>
+      </Tabs.Root>
     </div>
   );
 };

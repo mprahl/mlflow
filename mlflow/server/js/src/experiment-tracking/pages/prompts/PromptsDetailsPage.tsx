@@ -216,8 +216,24 @@ const PromptsDetailsPage = ({ experimentId }: { experimentId?: string } = {}) =>
       />
       <PromptsListTableTagsBox onTagsUpdated={refetch} promptEntity={promptDetailsData?.prompt} />
       <Spacer shrinks={false} />
-      <div css={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        <div css={{ flex: showPreviewPane ? '0 0 320px' : 1, display: 'flex', flexDirection: 'column' }}>
+      <div
+        css={{
+          flex: 1,
+          display: 'flex',
+          minHeight: 0,
+          overflow: 'hidden',
+          '@media (max-width: 760px)': { flexDirection: 'column' },
+        }}
+      >
+        <div
+          css={{
+            flex: showPreviewPane ? '0 0 320px' : 1,
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 0,
+            '@media (max-width: 760px)': { flex: showPreviewPane ? '0 0 240px' : 1 },
+          }}
+        >
           <div css={{ display: 'flex', gap: theme.spacing.sm }}>
             <SegmentedControlGroup
               name="mlflow.prompts.details.mode"
@@ -277,8 +293,20 @@ const PromptsDetailsPage = ({ experimentId }: { experimentId?: string } = {}) =>
           />
         </div>
         {showPreviewPane && (
-          <div css={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-            <div css={{ borderLeft: `1px solid ${theme.colors.border}`, flex: 1, overflow: 'hidden', display: 'flex' }}>
+          <div css={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
+            <div
+              css={{
+                borderLeft: `1px solid ${theme.colors.border}`,
+                flex: 1,
+                overflow: 'hidden',
+                display: 'flex',
+                '@media (max-width: 760px)': {
+                  borderLeft: 0,
+                  borderTop: `1px solid ${theme.colors.border}`,
+                  paddingTop: theme.spacing.md,
+                },
+              }}
+            >
               {mode === PromptVersionsTableMode.PREVIEW && (
                 <PromptContentPreview
                   promptVersion={selectedVersionEntity}

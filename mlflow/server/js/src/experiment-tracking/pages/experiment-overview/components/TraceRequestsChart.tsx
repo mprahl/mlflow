@@ -16,6 +16,7 @@ import {
   ScrollableTooltip,
 } from './OverviewChartComponents';
 import { useOverviewChartContext } from '../OverviewChartContext';
+import { useSnapshotChangeMarkers } from './SnapshotChangeMarkers';
 
 interface TraceRequestsChartProps {
   title?: React.ReactNode;
@@ -32,6 +33,7 @@ export const TraceRequestsChart: React.FC<TraceRequestsChartProps> = ({ title })
   const { totalRequests, avgRequests, isLoading, error, hasData, zoom } = useTraceRequestsChartData();
   const { zoomedData, isZoomed, refAreaLeft, refAreaRight, handleMouseDown, handleMouseMove, handleMouseUp, zoomOut } =
     zoom;
+  const snapshotMarkers = useSnapshotChangeMarkers(zoomedData);
 
   const tooltipFormatter = useCallback((value: number) => [`${value}`, 'Requests'] as [string, string], []);
 
@@ -86,6 +88,7 @@ export const TraceRequestsChart: React.FC<TraceRequestsChartProps> = ({ title })
               onMouseLeave={handleMouseUp}
             >
               <XAxis dataKey="name" {...xAxisProps} />
+              {snapshotMarkers}
               <YAxis {...yAxisProps} />
               <Tooltip
                 content={tooltipContent}

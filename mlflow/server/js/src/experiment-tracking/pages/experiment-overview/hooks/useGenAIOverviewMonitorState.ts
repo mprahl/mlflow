@@ -84,7 +84,10 @@ export const resolveGenAIOverviewMonitorState = ({
     : { status: 'empty' };
 };
 
-export const useGenAIOverviewMonitorState = (experimentId: string): GenAIOverviewMonitorState => {
+export const useGenAIOverviewMonitorState = (
+  experimentId: string,
+  baseFilters?: string[],
+): GenAIOverviewMonitorState => {
   const { data, isLoading, error } = useGetScheduledScorers(experimentId);
   const [timeRange] = useState(createOverviewTimeRange);
   const sqlWarehouseContext = useSqlWarehouseContextSafe();
@@ -104,12 +107,13 @@ export const useGenAIOverviewMonitorState = (experimentId: string): GenAIOvervie
   );
   const feedbackFilters = useMemo(
     () => [
+      ...(baseFilters ?? []),
       createAssessmentFilter(AssessmentFilterKey.TYPE, AssessmentTypeValue.FEEDBACK),
       `(${onlineScorerNames
         .map((scorerName) => createAssessmentFilter(AssessmentFilterKey.NAME, scorerName))
         .join(' OR ')})`,
     ],
-    [onlineScorerNames],
+    [onlineScorerNames, baseFilters],
   );
   const averageMetricsQuery = useTraceMetricsQuery({
     experimentIds: [experimentId],

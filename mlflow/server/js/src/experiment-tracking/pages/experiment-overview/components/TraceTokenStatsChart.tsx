@@ -17,6 +17,7 @@ import {
 } from './OverviewChartComponents';
 import { formatCount, useLegendHighlight, getLineDotStyle } from '../utils/chartUtils';
 import { useOverviewChartContext } from '../OverviewChartContext';
+import { useSnapshotChangeMarkers } from './SnapshotChangeMarkers';
 
 interface TraceTokenStatsChartProps {
   title?: React.ReactNode;
@@ -33,6 +34,7 @@ export const TraceTokenStatsChart: React.FC<TraceTokenStatsChartProps> = ({ titl
 
   // Fetch and process token stats chart data
   const { chartData, avgTokens, isLoading, error, hasData } = useTraceTokenStatsChartData();
+  const snapshotMarkers = useSnapshotChangeMarkers(chartData);
 
   const tooltipFormatter = useCallback(
     (value: number, name: string) => [formatCount(value), name] as [string, string],
@@ -76,6 +78,7 @@ export const TraceTokenStatsChart: React.FC<TraceTokenStatsChartProps> = ({ titl
         {hasData ? (
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
+              {snapshotMarkers}
               <XAxis dataKey="name" {...xAxisProps} />
               <YAxis {...yAxisProps} />
               <Tooltip

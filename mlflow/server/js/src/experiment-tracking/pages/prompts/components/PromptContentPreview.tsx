@@ -4,6 +4,7 @@ import {
   Modal,
   PlayIcon,
   Spacer,
+  Tabs,
   TrashIcon,
   MarkdownIcon,
   SegmentedControlButton,
@@ -31,6 +32,11 @@ import { ShowArtifactCodeSnippet } from '../../../components/artifact-view-compo
 import { ModelTraceExplorerChatMessage } from '@databricks/web-shared/model-trace-explorer';
 import type { ModelTraceChatMessage } from '@databricks/web-shared/model-trace-explorer';
 import { OptimizeModal } from './OptimizeModal';
+import {
+  AssetUsageTabList,
+  AssetUsedByAgents,
+  AssetUsedByAgentsTab,
+} from '../../../../agent-registry/AssetUsedByAgents';
 
 const PROMPT_VARIABLE_REGEX = /\{\{\s*(.*?)\s*\}\}/g;
 
@@ -98,10 +104,16 @@ export const PromptContentPreview = ({
   );
 
   const { theme } = useDesignSystemTheme();
+  const usageAsset = {
+    kind: 'prompt' as const,
+    name: promptVersion?.name ?? '',
+    version: promptVersion?.version ?? '',
+  };
   return (
     <div
       css={{
         flex: 1,
+        minWidth: 0,
         padding: theme.spacing.md,
         paddingTop: 0,
         borderRadius: theme.borders.borderRadiusSm,
@@ -110,7 +122,7 @@ export const PromptContentPreview = ({
         flexDirection: 'column',
       }}
     >
-      <div css={{ display: 'flex', justifyContent: 'space-between' }}>
+      <div css={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: theme.spacing.sm }}>
         <div
           css={{
             display: 'flex',
@@ -166,100 +178,111 @@ export const PromptContentPreview = ({
         </div>
       </div>
       <Spacer shrinks={false} />
-      <PromptVersionMetadata
-        aliasesByVersion={aliasesByVersion}
-        registeredPrompt={registeredPrompt}
-        registeredPromptVersion={promptVersion}
-        showEditAliasesModal={showEditAliasesModal}
-        showEditPromptVersionMetadataModal={showEditPromptVersionMetadataModal}
-        showEditModelConfigModal={showEditModelConfigModal}
-      />
-      {isChatPromptType && <Spacer shrinks={false} />}
-      <div css={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.sm }}>
-        <div css={{ display: 'flex', justifyContent: 'flex-end' }}>
-          {!isChatPromptType && (
-            <SegmentedControlGroup
-              name="render-mode"
-              size="small"
-              componentId="mlflow.prompts.details.toggle-markdown-rendering"
-              value={shouldRenderMarkdown}
-              onChange={(event) => setShouldRenderMarkdown(event.target.value)}
-              css={{ display: 'flex' }}
-            >
-              <SegmentedControlButton value={false}>
-                <Tooltip
-                  componentId="mlflow.prompts.details.plaintext-rendering-tooltip"
-                  content={
-                    <FormattedMessage
-                      defaultMessage="Plain text"
-                      description="Tooltip content for a button that changes the render mode of the prompt to plain text"
-                    />
-                  }
+      <Tabs.Root componentId="mlflow.prompts.details.version_tabs" defaultValue="details" valueHasNoPii>
+        <AssetUsageTabList>
+          <Tabs.Trigger value="details">Details</Tabs.Trigger>
+          {promptVersion && <AssetUsedByAgentsTab asset={usageAsset} />}
+        </AssetUsageTabList>
+        <Tabs.Content value="details">
+          <PromptVersionMetadata
+            aliasesByVersion={aliasesByVersion}
+            registeredPrompt={registeredPrompt}
+            registeredPromptVersion={promptVersion}
+            showEditAliasesModal={showEditAliasesModal}
+            showEditPromptVersionMetadataModal={showEditPromptVersionMetadataModal}
+            showEditModelConfigModal={showEditModelConfigModal}
+          />
+          {isChatPromptType && <Spacer shrinks={false} />}
+          <div css={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.sm }}>
+            <div css={{ display: 'flex', justifyContent: 'flex-end' }}>
+              {!isChatPromptType && (
+                <SegmentedControlGroup
+                  name="render-mode"
+                  size="small"
+                  componentId="mlflow.prompts.details.toggle-markdown-rendering"
+                  value={shouldRenderMarkdown}
+                  onChange={(event) => setShouldRenderMarkdown(event.target.value)}
+                  css={{ display: 'flex' }}
                 >
-                  <div css={{ display: 'flex', alignItems: 'center' }}>
-                    <Typography.Text>
-                      {' '}
-                      <FormattedMessage
-                        defaultMessage="Text"
-                        description="Label for the text render mode of the prompt"
-                      />
-                    </Typography.Text>
-                  </div>
-                </Tooltip>
-              </SegmentedControlButton>
-              <SegmentedControlButton value>
-                <Tooltip
-                  componentId="mlflow.prompts.details.markdown-rendering-tooltip"
-                  content={
-                    <FormattedMessage
-                      defaultMessage="Markdown"
-                      description="Tooltip content for a button that changes the render mode of the prompt to markdown"
-                    />
-                  }
-                >
-                  <div css={{ display: 'flex', alignItems: 'center' }}>
-                    <MarkdownIcon css={{ fontSize: theme.typography.fontSizeLg }} />
-                  </div>
-                </Tooltip>
-              </SegmentedControlButton>
-            </SegmentedControlGroup>
-          )}
-        </div>
-        <div
-          css={{
-            backgroundColor: isChatPromptType ? undefined : theme.colors.backgroundSecondary,
-            padding: theme.spacing.md,
-            overflow: 'auto',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: theme.spacing.sm,
-          }}
-        >
-          {isChatPromptType && parsedMessages ? (
-            parsedMessages.map((msg: any, index: number) => (
-              <ModelTraceExplorerChatMessage
-                key={index}
-                message={
-                  {
-                    ...msg,
-                    content: msg.content,
-                  } as ModelTraceChatMessage
-                }
-              />
-            ))
-          ) : shouldRenderMarkdown ? (
-            <GenAIMarkdownRenderer>{value || 'Empty'}</GenAIMarkdownRenderer>
-          ) : (
-            <Typography.Text
+                  <SegmentedControlButton value={false}>
+                    <Tooltip
+                      componentId="mlflow.prompts.details.plaintext-rendering-tooltip"
+                      content={
+                        <FormattedMessage
+                          defaultMessage="Plain text"
+                          description="Tooltip content for a button that changes the render mode of the prompt to plain text"
+                        />
+                      }
+                    >
+                      <div css={{ display: 'flex', alignItems: 'center' }}>
+                        <Typography.Text>
+                          {' '}
+                          <FormattedMessage
+                            defaultMessage="Text"
+                            description="Label for the text render mode of the prompt"
+                          />
+                        </Typography.Text>
+                      </div>
+                    </Tooltip>
+                  </SegmentedControlButton>
+                  <SegmentedControlButton value>
+                    <Tooltip
+                      componentId="mlflow.prompts.details.markdown-rendering-tooltip"
+                      content={
+                        <FormattedMessage
+                          defaultMessage="Markdown"
+                          description="Tooltip content for a button that changes the render mode of the prompt to markdown"
+                        />
+                      }
+                    >
+                      <div css={{ display: 'flex', alignItems: 'center' }}>
+                        <MarkdownIcon css={{ fontSize: theme.typography.fontSizeLg }} />
+                      </div>
+                    </Tooltip>
+                  </SegmentedControlButton>
+                </SegmentedControlGroup>
+              )}
+            </div>
+            <div
               css={{
-                whiteSpace: 'pre-wrap',
+                backgroundColor: isChatPromptType ? undefined : theme.colors.backgroundSecondary,
+                padding: theme.spacing.md,
+                overflow: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: theme.spacing.sm,
               }}
             >
-              {value || 'Empty'}
-            </Typography.Text>
-          )}
-        </div>
-      </div>
+              {isChatPromptType && parsedMessages ? (
+                parsedMessages.map((msg: any, index: number) => (
+                  <ModelTraceExplorerChatMessage
+                    key={index}
+                    message={
+                      {
+                        ...msg,
+                        content: msg.content,
+                      } as ModelTraceChatMessage
+                    }
+                  />
+                ))
+              ) : shouldRenderMarkdown ? (
+                <GenAIMarkdownRenderer>{value || 'Empty'}</GenAIMarkdownRenderer>
+              ) : (
+                <Typography.Text
+                  css={{
+                    whiteSpace: 'pre-wrap',
+                  }}
+                >
+                  {value || 'Empty'}
+                </Typography.Text>
+              )}
+            </div>
+          </div>
+        </Tabs.Content>
+        <Tabs.Content value="agents">
+          <AssetUsedByAgents key={`${usageAsset.name}/${usageAsset.version}`} asset={usageAsset} />
+        </Tabs.Content>
+      </Tabs.Root>
       <Modal
         componentId="mlflow.prompts.details.preview.usage_example_modal"
         title={

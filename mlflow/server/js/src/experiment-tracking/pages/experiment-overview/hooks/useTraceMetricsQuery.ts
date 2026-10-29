@@ -16,7 +16,7 @@ export const TRACE_METRICS_QUERY_KEY = 'traceMetrics';
 /**
  * Query aggregated trace metrics for experiments
  */
-async function queryTraceMetrics(params: QueryTraceMetricsRequest): Promise<QueryTraceMetricsResponse> {
+export async function queryTraceMetrics(params: QueryTraceMetricsRequest): Promise<QueryTraceMetricsResponse> {
   return fetchOrFail(getAjaxUrl('ajax-api/3.0/mlflow/traces/metrics'), {
     method: 'POST',
     headers: {

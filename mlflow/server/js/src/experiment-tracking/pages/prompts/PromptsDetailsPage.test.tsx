@@ -67,6 +67,16 @@ describe('PromptsDetailsPage', () => {
     expect(screen.getByRole('status', { name: 'some_version_tag' })).toBeInTheDocument();
   });
 
+  it('keeps Used by agents selected when changing prompt versions', async () => {
+    renderTestComponent();
+    await userEvent.click(await screen.findByRole('tab', { name: 'Used by agents (0)' }));
+    expect(screen.getByText('No agent snapshots reference this version.')).toBeInTheDocument();
+    await userEvent.click(screen.getByText('Version 1'));
+    expect(screen.getByRole('tab', { name: 'Used by agents (0)' })).toHaveAttribute('aria-selected', 'true');
+    await userEvent.click(screen.getByRole('tab', { name: 'Details' }));
+    expect(screen.getByText('content of prompt version 1')).toBeInTheDocument();
+  });
+
   it("should preview prompt versions' contents, aliases and commit message", async () => {
     server.use(getMockedRegisteredPromptVersionsResponse('prompt1', 2));
     renderTestComponent();

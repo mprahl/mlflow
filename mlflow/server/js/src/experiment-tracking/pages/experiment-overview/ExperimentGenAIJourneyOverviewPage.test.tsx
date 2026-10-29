@@ -6,6 +6,7 @@ import { testRoute, TestRouter } from '../../../common/utils/RoutingTestUtils';
 import { generatePath, useLocation } from '../../../common/utils/RoutingUtils';
 import { RoutePaths } from '../../routes';
 import ExperimentGenAIJourneyOverviewPage from './ExperimentGenAIJourneyOverviewPage';
+import type { GenAIJourneyExtensions } from './ExperimentGenAIJourneyOverviewPage';
 
 const mockOpenAssistantPanel = jest.fn();
 const mockPrefillAssistantPrompt = jest.fn();
@@ -102,11 +103,12 @@ jest.mock('../../components/experiment-page/components/traces-v3/IssueDetectionM
 }));
 
 describe('ExperimentGenAIJourneyOverviewPage', () => {
-  const renderPage = () =>
+  const renderPage = (props: GenAIJourneyExtensions = {}) =>
     renderWithDesignSystem(
       <TestRouter
         routes={[
-          testRoute(<ExperimentGenAIJourneyOverviewPage />, RoutePaths.experimentPageTabJourneyOverview),
+          testRoute(<ExperimentGenAIJourneyOverviewPage {...props} />, RoutePaths.experimentPageTabJourneyOverview),
+          testRoute(<CurrentTestLocation />, '/agents/:agentId/traces'),
           testRoute(<CurrentTestLocation />, RoutePaths.experimentPageTabTraces),
           testRoute(<CurrentTestLocation />, RoutePaths.experimentPageTabIssues),
           testRoute(<CurrentTestLocation />, RoutePaths.experimentPageTabIssueDetectionRunDetailsWithTab),
@@ -178,10 +180,42 @@ describe('ExperimentGenAIJourneyOverviewPage', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'View traces' }));
 
-    expect(mockUseGenAIOverviewTraceState).toHaveBeenLastCalledWith('123', false);
+    expect(mockUseGenAIOverviewTraceState).toHaveBeenLastCalledWith('123', false, undefined);
     expect(mockUseGenAIOverviewAnalyzeState).toHaveBeenLastCalledWith('123', false);
     expect(await screen.findByRole('status', { name: 'Current test location' })).toHaveTextContent(
       '/experiments/123/traces?startTimeLabel=LAST_30_DAYS',
+    );
+  });
+
+  test('reuses the journey with Agent scoping, lists, and navigation', async () => {
+    const filters = ["trace.tag.`mlflow.agent.id` = 'support-agent'"];
+    const runFilter = "tags.`mlflow.agent.id` = 'support-agent'";
+    renderPage({
+      experimentIdOverride: '456',
+      baseTraceFilters: filters,
+      baseRunFilter: runFilter,
+      readOnly: true,
+      headerContent: <div>Access endpoints list</div>,
+      footerContent: <div>Agent snapshots list</div>,
+      routes: {
+        traces: '/agents/support-agent/traces',
+        evaluations: '/agents/support-agent/evaluation-runs',
+        dashboard: '/agents/support-agent/dashboard',
+      },
+    });
+    expect(await screen.findByText('Access endpoints list')).toBeInTheDocument();
+    const introduction = screen
+      .getByRole('heading', { name: "Let's improve your agent with MLflow" })
+      .closest('section');
+    expect(introduction?.nextElementSibling).toBe(screen.getByText('Access endpoints list'));
+    expect(screen.getByText('Access endpoints list').parentElement).toBe(introduction?.parentElement);
+    expect(screen.getByText('Agent snapshots list')).toBeInTheDocument();
+    expect(mockUseGenAIOverviewTraceState).toHaveBeenLastCalledWith('456', false, filters);
+    expect(mockUseGenAIOverviewEvalState).toHaveBeenLastCalledWith('456', runFilter);
+    expect(mockUseGenAIOverviewMonitorState).toHaveBeenLastCalledWith('456', filters);
+    await userEvent.click(screen.getByRole('button', { name: 'View traces' }));
+    expect(screen.getByRole('status', { name: 'Current test location' })).toHaveTextContent(
+      '/agents/support-agent/traces',
     );
   });
 

@@ -24,6 +24,7 @@ import {
 import type { FleetMember } from './fleetScope';
 import type { Fleet } from './mockData';
 import { getAgent } from './mockData';
+import { agentTraceColumns } from './agentTraceColumns';
 
 const FleetTimeline = ({ members, environment }: { members: FleetMember[]; environment: string }) => {
   const [{ startTime, endTime }] = useMonitoringFilters();
@@ -108,6 +109,7 @@ const FleetTraces = ({
         experimentIds={[experimentId]}
         timeRange={timeRange}
         additionalFilters={filters}
+        additionalDefaultColumns={agentTraceColumns}
         columnStorageKeyPrefix={`fleet-${fleet.id}`}
         initialGroupBySession={params.get('groupBy') === 'session'}
         disableActions
@@ -279,7 +281,6 @@ const FleetEvaluations = ({
                 Snapshot #{snapshot}
               </Link>
             )}
-            <Tag componentId="mlflow.agent_registry.fleet.evaluation.environment">{environment}</Tag>
           </div>
         );
       }}

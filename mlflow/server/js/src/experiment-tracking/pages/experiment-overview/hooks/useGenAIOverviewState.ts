@@ -65,7 +65,11 @@ export const resolveGenAIOverviewTraceState = ({
   return totalCount > 0 ? { status: 'ready', activity, totalCount } : { status: 'empty', activity };
 };
 
-export const useGenAIOverviewTraceState = (experimentId: string, useRollingSevenDayRange: boolean = false) => {
+export const useGenAIOverviewTraceState = (
+  experimentId: string,
+  useRollingSevenDayRange: boolean = false,
+  filters?: string[],
+) => {
   const { dateNow } = useMonitoringConfig();
   const [legacyTimeRange] = useState(() => createGenAIOverviewTimeRange(new Date(), false));
   const rollingTimeRange = useMemo(() => createGenAIOverviewTimeRange(dateNow, true), [dateNow]);
@@ -82,6 +86,7 @@ export const useGenAIOverviewTraceState = (experimentId: string, useRollingSeven
     aggregations: [{ aggregation_type: AggregationType.COUNT }],
     timeIntervalSeconds: GENAI_OVERVIEW_TIME_INTERVAL_SECONDS,
     dimensions: [TraceDimensionKey.TRACE_STATUS],
+    filters,
     enabled: !warehouseRequired,
     refetchIntervalWhileEmptyMs: FIRST_TRACE_POLL_INTERVAL_MS,
   });

@@ -29,6 +29,7 @@ export interface OverviewChartContextValue {
    * which uses the metrics-API DSL.
    */
   tracesNavigationFilters?: string[];
+  snapshotAnnotations?: { at: string; label: string }[];
 }
 
 export const OverviewChartContext = createContext<OverviewChartContextValue | null>(null);
@@ -53,6 +54,7 @@ export const OverviewChartProvider: React.FC<OverviewChartProviderProps> = ({
   tooltipLinkText,
   filters,
   tracesNavigationFilters,
+  snapshotAnnotations,
 }) => {
   const value = useMemo(
     () => ({
@@ -66,6 +68,7 @@ export const OverviewChartProvider: React.FC<OverviewChartProviderProps> = ({
       tooltipLinkText,
       filters,
       tracesNavigationFilters,
+      snapshotAnnotations,
     }),
     [
       experimentIds,
@@ -78,6 +81,7 @@ export const OverviewChartProvider: React.FC<OverviewChartProviderProps> = ({
       tooltipLinkText,
       filters,
       tracesNavigationFilters,
+      snapshotAnnotations,
     ],
   );
 

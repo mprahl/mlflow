@@ -51,6 +51,9 @@ const DEMO_START_TIME_TAG = 'mlflow.demo.start_time_ms';
 const DEMO_END_TIME_TAG = 'mlflow.demo.end_time_ms';
 
 export type ExperimentGenAIOverviewPageProps = {
+  hideTabs?: boolean;
+  usageContent?: ReactNode;
+  snapshotAnnotations?: { at: string; label: string }[];
   experimentIdOverride?: string;
   baseFilters?: string[];
   baseTracesNavigationFilters?: string[];
@@ -64,6 +67,9 @@ export type ExperimentGenAIOverviewPageProps = {
 };
 
 const ExperimentGenAIOverviewPageImpl = ({
+  hideTabs = false,
+  usageContent,
+  snapshotAnnotations,
   experimentIdOverride,
   baseFilters,
   baseTracesNavigationFilters,
@@ -274,39 +280,41 @@ const ExperimentGenAIOverviewPageImpl = ({
         valueHasNoPii
         css={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}
       >
-        <Tabs.List
-          scrollAreaViewportCss={{ backgroundImage: 'none' }}
-          css={{
-            '& [role="tab"]': {
-              height: theme.general.heightSm,
-              '&[data-state="active"]': {
-                boxShadow: 'none',
-                borderBottom: `${theme.spacing.xs}px solid ${theme.colors.actionPrimaryBackgroundDefault}`,
-                paddingBottom: theme.spacing.xs,
+        {!hideTabs && (
+          <Tabs.List
+            scrollAreaViewportCss={{ backgroundImage: 'none' }}
+            css={{
+              '& [role="tab"]': {
+                height: theme.general.heightSm,
+                '&[data-state="active"]': {
+                  boxShadow: 'none',
+                  borderBottom: `${theme.spacing.xs}px solid ${theme.colors.actionPrimaryBackgroundDefault}`,
+                  paddingBottom: theme.spacing.xs,
+                },
               },
-            },
-          }}
-        >
-          <Tabs.Trigger value={OverviewTab.Usage}>
-            <FormattedMessage
-              defaultMessage="Usage"
-              description="Label for the usage tab in the experiment overview page"
-            />
-          </Tabs.Trigger>
-          <Tabs.Trigger value={OverviewTab.Quality}>
-            <FormattedMessage
-              defaultMessage="Quality"
-              description="Label for the quality tab in the experiment overview page"
-            />
-          </Tabs.Trigger>
-          <Tabs.Trigger value={OverviewTab.ToolCalls}>
-            <FormattedMessage
-              defaultMessage="Tool calls"
-              description="Label for the tool calls tab in the experiment overview page"
-            />
-          </Tabs.Trigger>
-          {timelineContent && <Tabs.Trigger value="timeline">Timeline</Tabs.Trigger>}
-        </Tabs.List>
+            }}
+          >
+            <Tabs.Trigger value={OverviewTab.Usage}>
+              <FormattedMessage
+                defaultMessage="Usage"
+                description="Label for the usage tab in the experiment overview page"
+              />
+            </Tabs.Trigger>
+            <Tabs.Trigger value={OverviewTab.Quality}>
+              <FormattedMessage
+                defaultMessage="Quality"
+                description="Label for the quality tab in the experiment overview page"
+              />
+            </Tabs.Trigger>
+            <Tabs.Trigger value={OverviewTab.ToolCalls}>
+              <FormattedMessage
+                defaultMessage="Tool calls"
+                description="Label for the tool calls tab in the experiment overview page"
+              />
+            </Tabs.Trigger>
+            {timelineContent && <Tabs.Trigger value="timeline">Timeline</Tabs.Trigger>}
+          </Tabs.List>
+        )}
 
         {/* Control bar with time range */}
         <div
@@ -353,6 +361,7 @@ const ExperimentGenAIOverviewPageImpl = ({
         </div>
 
         <OverviewChartProvider
+          snapshotAnnotations={snapshotAnnotations}
           experimentIds={[experimentId]}
           startTimeMs={startTimeMs}
           endTimeMs={endTimeMs}
@@ -367,6 +376,7 @@ const ExperimentGenAIOverviewPageImpl = ({
             <TabContentContainer>
               {/* Requests chart - full width */}
               <LazyTraceRequestsChart />
+              {usageContent}
 
               {/* Latency and Errors charts - side by side (latency requires UC) */}
               <ChartGrid>

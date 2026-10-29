@@ -17,6 +17,7 @@ import {
 } from './OverviewChartComponents';
 import { formatLatency, useLegendHighlight, getLineDotStyle } from '../utils/chartUtils';
 import { useOverviewChartContext } from '../OverviewChartContext';
+import { useSnapshotChangeMarkers } from './SnapshotChangeMarkers';
 
 export const TraceLatencyChart: React.FC = () => {
   const { theme } = useDesignSystemTheme();
@@ -28,6 +29,7 @@ export const TraceLatencyChart: React.FC = () => {
 
   // Fetch and process latency chart data
   const { chartData, avgLatency, isLoading, error, hasData } = useTraceLatencyChartData();
+  const snapshotMarkers = useSnapshotChangeMarkers(chartData);
 
   const tooltipFormatter = useCallback(
     (value: number, name: string) => [formatLatency(value), name] as [string, string],
@@ -62,6 +64,7 @@ export const TraceLatencyChart: React.FC = () => {
         {hasData ? (
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
+              {snapshotMarkers}
               <XAxis dataKey="name" {...xAxisProps} />
               <YAxis {...yAxisProps} />
               <Tooltip

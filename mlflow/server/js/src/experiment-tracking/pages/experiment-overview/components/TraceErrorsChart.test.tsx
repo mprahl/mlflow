@@ -8,7 +8,7 @@ import { QueryClient, QueryClientProvider } from '@mlflow/mlflow/src/common/util
 import { AggregationType, TraceMetricKey, TraceDimensionKey } from '@databricks/web-shared/model-trace-explorer';
 import { setupServer } from '../../../../common/utils/setup-msw';
 import { rest } from 'msw';
-import { OverviewChartProvider } from '../OverviewChartContext';
+import { OverviewChartProvider, type OverviewChartContextValue } from '../OverviewChartContext';
 import { MemoryRouter, useLocation } from '../../../../common/utils/RoutingUtils';
 import { getAjaxUrl } from '@mlflow/mlflow/src/common/utils/FetchUtils';
 
@@ -31,6 +31,9 @@ jest.mock('recharts', () => {
   ];
   return {
     ...baseMock,
+    ReferenceLine: ({ label, yAxisId }: { label?: { value?: string }; yAxisId?: string | number }) => (
+      <div data-testid="reference-line" data-label={label?.value} data-y-axis-id={yAxisId} />
+    ),
     Tooltip: ({ content }: { content?: unknown }) =>
       React.isValidElement(content) ? (
         React.cloneElement(content as React.ReactElement, { active: true, payload })
@@ -88,7 +91,7 @@ describe('TraceErrorsChart', () => {
       },
     });
 
-  const renderComponent = (contextOverrides: Partial<typeof defaultContextProps> = {}) => {
+  const renderComponent = (contextOverrides: Partial<OverviewChartContextValue> = {}) => {
     const queryClient = createQueryClient();
     const contextProps = { ...defaultContextProps, ...contextOverrides };
     return renderWithIntl(
@@ -135,6 +138,20 @@ describe('TraceErrorsChart', () => {
     jest.clearAllMocks();
     // Default: return empty data points
     setupTraceMetricsHandler([]);
+  });
+
+  it('renders snapshot changes above the error series using the count axis', async () => {
+    setupTraceMetricsHandler([
+      createStatusDataPoint('2025-12-22T10:00:00Z', 90, 'OK'),
+      createStatusDataPoint('2025-12-22T10:00:00Z', 10, 'ERROR'),
+    ]);
+    renderComponent({ snapshotAnnotations: [{ at: '2025-12-22T10:30:00Z', label: 'Snapshot #8' }] });
+    expect(await screen.findByText('Errors')).toBeInTheDocument();
+    const marker = screen
+      .getAllByTestId('reference-line')
+      .find((line) => line.getAttribute('data-label') === 'Snapshot #8');
+    expect(marker).toHaveAttribute('data-y-axis-id', 'left');
+    expect(screen.getByTestId('composed-chart').lastElementChild).toBe(marker);
   });
 
   describe('loading state', () => {
